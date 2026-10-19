@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Metro París en vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06080d; --panel:#0d1119; --panel2:#141a26; --line:#222b3b;
+  --led:#ffb21a; --led-dim:#7a5610; --txt:#e8ecf3; --mut:#8791a5; --ok:#3ddc84; --err:#ff6b6b; --acc:#4a6cf7;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--line)}
+header h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.3px;color:var(--mut);flex:1}
+#clock{font-family:"DotGothic16",monospace;font-size:26px;color:var(--led);letter-spacing:2px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:8px;padding:7px 12px}
+button:hover{border-color:#3a475f}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button.ico{padding:7px 10px}
+main{flex:1;padding:16px;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));align-content:start}
+.board{background:#000;border:2px solid #1b1f2a;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px #000 inset}
+.board .top{display:flex;align-items:center;gap:12px;padding:10px 14px;background:linear-gradient(#10151f,#0a0d14);border-bottom:1px solid #1b1f2a}
+.badge{flex:none;min-width:40px;height:40px;padding:0 6px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;font-family:system-ui,sans-serif}
+.badge.sq{border-radius:8px}
+.top .st{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:1px}
+.top .dir{font-size:17px;font-weight:600;line-height:1.2}
+.top .x{margin-left:auto;opacity:.0;transition:.15s}
+.board:hover .x{opacity:1}
+.rows{padding:6px 14px 12px}
+.row{display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px dashed #1c2230;font-family:"DotGothic16",ui-monospace,monospace;color:var(--led)}
+.row:last-child{border-bottom:none}
+.row .n{width:22px;color:var(--led-dim);font-size:22px}
+.row .d{flex:1;font-size:24px;text-shadow:0 0 8px rgba(255,178,26,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t{font-size:34px;text-shadow:0 0 10px rgba(255,178,26,.6);min-width:110px;text-align:right}
+.row .t.sm{font-size:22px}
+.row.dim .t,.row.dim .d{color:var(--led-dim);text-shadow:none}
+.rt{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-left:8px;vertical-align:middle;box-shadow:0 0 6px var(--ok)}
+.rt.off{background:#555;box-shadow:none}
+.msg{font-family:"DotGothic16",monospace;color:var(--led);font-size:24px;padding:16px 4px;text-shadow:0 0 8px rgba(255,178,26,.45)}
+.msg.err{color:var(--err);font-size:16px;text-shadow:none;font-family:system-ui}
+.empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:60px 10px}
+footer{padding:8px 18px;border-top:1px solid var(--line);color:var(--mut);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
+.demo{color:var(--led)}
+/* diálogo */
+dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:0;width:min(640px,94vw);max-height:90vh}
+dialog::backdrop{background:rgba(0,0,0,.7)}
+.dlg{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.dlg h2{margin:0;font-size:18px}
+.dlg h3{margin:4px 0 0;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px 12px;font:inherit}
+.hint{font-size:12px;color:var(--mut);line-height:1.5}
+.list{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow:auto}
+.item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);cursor:pointer;text-align:left}
+.item:hover{border-color:var(--acc)}
+.item .badge{min-width:30px;height:30px;font-size:14px}
+.item small{color:var(--mut);margin-left:auto}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);font-size:12px;cursor:pointer}
+.chip.on{background:var(--acc);border-color:var(--acc)}
+.actions{display:flex;gap:8px;justify-content:flex-end}
+.hide{display:none!important}
+@media (max-width:520px){main{grid-template-columns:1fr}.row .d{font-size:19px}.row .t{font-size:28px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚇 METRO PARÍS · TIEMPO REAL</h1>
+  <div id="clock">--:--:--</div>
+  <button class="ico" id="btnAdd" title="Añadir pantalla">＋ Añadir</button>
+  <button class="ico" id="btnSet" title="Ajustes">⚙</button>
+  <button class="ico" id="btnFs" title="Pantalla completa">⛶</button>
+</header>
+<main id="boards"></main>
+<footer>
+  <span id="status">Cargando…</span>
+  <span id="mode"></span>
+</footer>
+
+<!-- Diálogo: añadir pantalla -->
+<dialog id="dlgAdd">
+  <div class="dlg">
+    <h2>Añadir pantalla</h2>
+    <div>
+      <h3>1 · Estación</h3>
+      <input type="text" id="q" placeholder="Escribe una estación (p. ej. Châtelet, Bastille, Nation…)" autocomplete="off">
+    </div>
+    <div class="list" id="stations"></div>
+    <div id="stepRoutes" class="hide">
+      <h3>2 · Línea y dirección <span id="stName" style="text-transform:none;color:var(--txt)"></span></h3>
+      <div class="tabs" id="modeTabs" style="margin:8px 0"></div>
+      <div class="list" id="routes"></div>
+      <div class="hint" style="margin-top:6px">Puedes marcar varias direcciones; se añadirá una pantalla por cada una.</div>
+    </div>
+    <div class="actions">
+      <button id="addCancel">Cerrar</button>
+      <button class="pri hide" id="addOk">Añadir seleccionadas</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Diálogo: ajustes -->
+<dialog id="dlgSet">
+  <div class="dlg">
+    <h2>Ajustes</h2>
+    <div>
+      <h3>Clave API de PRIM (Île-de-France Mobilités)</h3>
+      <input type="password" id="apikey" placeholder="Pega aquí tu clave (déjala vacía para el modo demo)">
+      <div class="hint">Es gratuita: crea una cuenta en <b>prim.iledefrance-mobilites.fr</b>, suscríbete a la API <i>«Navitia – Île-de-France»</i> (v2) y copia tu clave. Se guarda solo en este navegador.</div>
+    </div>
+    <div>
+      <h3>Siguientes trenes por pantalla</h3>
+      <div class="tabs" id="cntTabs"></div>
+    </div>
+    <div>
+      <h3>Actualizar cada</h3>
+      <div class="tabs" id="refTabs"></div>
+    </div>
+    <div class="actions">
+      <button id="setCancel">Cancelar</button>
+      <button class="pri" id="setOk">Guardar</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+/* ===== Utilidades ===== */
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v===null? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const DIRECT_BASE = 'https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/coverage/fr-idf';
+const state = {
+  key: store.get('key',''),
+  boards: store.get('boards',[]),
+  count: store.get('count',3),
+  refresh: store.get('refresh',30),
+  base: DIRECT_BASE,
+  proxy: false,
+  data: {}   // por id de pantalla
+};
+
+/* Hora actual de París como "milisegundos de pared" (misma escala que las fechas de Navitia) */
+function parisNow(){
+  const p = new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Paris',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(new Date());
+  const g = t => +p.find(x=>x.type===t).value;
+  return Date.UTC(g('year'),g('month')-1,g('day'),g('hour')%24,g('minute'),g('second'));
+}
+function parseNav(s){
+  const m = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)/.exec(s||'');
+  return m ? Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]) : NaN;
+}
+const demoMode = () => !state.key && !state.proxyHasKey;
+
+/* ===== API ===== */
+async function api(path){
+  const headers = state.key ? {apikey: state.key} : {};
+  let r;
+  try{ r = await fetch(state.base + path, {headers}); }
+  catch(e){ throw new Error('No se pudo conectar con la API (bloqueo CORS o sin red). Abre la página desde tu dirección de Cloudflare Pages o usa servidor.py.'); }
+  if(r.status===401 || r.status===403) throw new Error('Clave API rechazada (revisa Ajustes).');
+  if(r.status===429) throw new Error('Demasiadas peticiones; sube el intervalo de actualización.');
+  if(!r.ok) throw new Error('Error de la API ('+r.status+')');
+  return r.json();
+}
+
+/* ---- Datos de demostración ---- */
+const DEMO_STATIONS = [
+  {id:'demo:chatelet', name:'Châtelet (Paris)'},
+  {id:'demo:bastille', name:'Bastille (Paris)'},
+  {id:'demo:nation', name:'Nation (Paris)'},
+  {id:'demo:gare-de-lyon', name:'Gare de Lyon (Paris)'},
+  {id:'demo:montparnasse', name:'Montparnasse – Bienvenüe (Paris)'},
+  {id:'demo:saint-lazare', name:'Saint-Lazare (Paris)'}
+];
+const DL = {
+  '1': {color:'FFCD00',text:'000000'}, '4':{color:'BE418D',text:'FFFFFF'}, '6':{color:'6ECA97',text:'000000'},
+  '7':{color:'FA9ABA',text:'000000'}, '14':{color:'62259D',text:'FFFFFF'}, '11':{color:'704B1C',text:'FFFFFF'}, '5':{color:'FF7E2E',text:'000000'}
+};
+const DEMO_DIRS = {'1':['La Défense','Château de Vincennes'],'4':['Porte de Clignancourt','Bagneux – Lucie Aubrac'],'6':['Charles de Gaulle – Étoile','Nation'],'7':['La Courneuve – 8 Mai 1945','Mairie d\'Ivry'],'14':['Saint-Denis – Pleyel','Olympiades'],'11':['Mairie des Lilas','Rosny – Bois-Perrier'],'5':['Bobigny – Pablo Picasso','Place d\'Italie']};
+function demoLinesFor(id){
+  const map = {'demo:chatelet':['1','4','7','11','14'],'demo:bastille':['1','5','8'],'demo:nation':['1','2','6','9'],'demo:gare-de-lyon':['1','14'],'demo:montparnasse':['4','6','12','13'],'demo:saint-lazare':['3','12','13','14']};
+  return (map[id]||['1','4']).filter(c=>DL[c]);
+}
+function hashStr(s){ let h=0; for(const c of s) h=(h*31+c.charCodeAt(0))|0; return Math.abs(h); }
+
+async function searchStations(q){
+  if(demoMode()){
+    const n = q.toLowerCase();
+    return DEMO_STATIONS.filter(s=>s.name.toLowerCase().includes(n));
+  }
+  const j = await api('/places?q='+encodeURIComponent(q)+'&type[]=stop_area&count=8');
+  return (j.places||[]).filter(p=>p.embedded_type==='stop_area').map(p=>({id:p.id,name:p.name}));
+}
+
+async function getRoutes(stopId){
+  if(demoMode()){
+    const out=[];
+    for(const code of demoLinesFor(stopId)){
+      for(const dir of DEMO_DIRS[code]){
+        out.push({lineId:'demo:'+code, code, color:DL[code].color, text:DL[code].text, mode:'Métro', dir, routeIds:['demo:'+code+':'+dir]});
+      }
+    }
+    return out;
+  }
+  const j = await api('/stop_areas/'+stopId+'/routes?count=100');
+  const map = new Map();
+  for(const r of (j.routes||[])){
+    const l = r.line||{};
+    const dir = (r.direction&&r.direction.name) || r.name;
+    const key = l.id+'|'+dir;
+    if(!map.has(key)){
+      map.set(key,{lineId:l.id, code:l.code||l.name, color:l.color||'444444', text:l.text_color||'FFFFFF',
+        mode:(l.commercial_mode&&l.commercial_mode.name)||'Otro', dir, routeIds:[]});
+    }
+    map.get(key).routeIds.push(r.id);
+  }
+  const rank = m => ({'Métro':0,'RER':1,'Train':2,'Tramway':3}[m] ?? 4);
+  return [...map.values()].sort((a,b)=> rank(a.mode)-rank(b.mode) || String(a.code).localeCompare(String(b.code),undefined,{numeric:true}) || a.dir.localeCompare(b.dir));
+}
+
+async function getDepartures(b){
+  if(demoMode() || b.stopId.startsWith('demo:')){
+    const now = parisNow();
+    const h = hashStr(b.stopId+b.code+b.dir);
+    const gap = (3 + h%4)*60000, phase = (h%170)*1000;
+    const out=[];
+    for(let i=0;i<6;i++){ out.push({t: now + phase + i*gap + ((h>>3)%50)*1000*(i?1:0), rt:true}); }
+    // algunas demos a la hora de servicio terminado: no aplica; siempre simulamos servicio
+    return out;
+  }
+  const lineId = b.lineId;
+  const j = await api('/lines/'+lineId+'/stop_areas/'+b.stopId+'/departures?data_freshness=realtime&count=30&duration=7200');
+  const ids = new Set(b.routeIds);
+  return (j.departures||[])
+    .filter(d => ids.has(d.route && d.route.id))
+    .map(d => ({t: parseNav(d.stop_date_time.departure_date_time), rt: d.stop_date_time.data_freshness==='realtime'}))
+    .filter(d => !isNaN(d.t))
+    .sort((a,b)=>a.t-b.t);
+}
+
+/* ===== Render ===== */
+function fmt(secs, rt){
+  if(secs < 30) return {txt:'À quai', sm:true};
+  if(secs < 60) return {txt:'À l\'approche', sm:true};
+  const m = Math.round(secs/60);
+  if(m >= 60){ return {txt:'+1 h', sm:false}; }
+  return {txt: m+' mn', sm:false};
+}
+function boardHTML(b){
+  const d = state.data[b.uid] || {};
+  const now = parisNow();
+  const fg = '#'+b.text, bg = '#'+b.color;
+  const sq = b.mode && b.mode!=='Métro' ? ' sq' : '';
+  let body;
+  if(d.err){
+    body = '<div class="msg err">⚠ '+esc(d.err)+'</div>';
+  } else if(!d.deps){
+    body = '<div class="msg">Chargement…</div>';
+  } else {
+    const live = d.deps.filter(x => (x.t-now)/1000 > -30).slice(0,state.count);
+    if(!live.length){
+      body = '<div class="msg">Service terminé</div>';
+    } else {
+      body = live.map((x,i)=>{
+        const f = fmt((x.t-now)/1000, x.rt);
+        const hhmm = new Date(x.t).toISOString().substr(11,5);
+        return '<div class="row'+(x.rt?'':' dim')+'"><span class="n">'+(i+1)+'</span>'+
+          '<span class="d">'+esc(b.dir)+'</span>'+
+          '<span class="t'+(f.sm?' sm':'')+'">'+(x.rt? f.txt : hhmm)+'</span>'+
+          '<span class="rt'+(x.rt?'':' off')+'" title="'+(x.rt?'Tiempo real':'Horario teórico')+'"></span></div>';
+      }).join('');
+    }
+  }
+  return '<section class="board" data-uid="'+b.uid+'">'+
+    '<div class="top"><div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
+    '<div><div class="st">'+esc(b.stopName)+'</div><div class="dir">→ '+esc(b.dir)+'</div></div>'+
+    '<button class="ico x" data-del="'+b.uid+'" title="Quitar">✕</button></div>'+
+    '<div class="rows">'+body+'</div></section>';
+}
+function render(){
+  const el = $('#boards');
+  if(!state.boards.length){
+    el.__sig = null;
+    el.innerHTML ='<div class="empty"><div style="font-size:42px">🚇</div><p>Aún no hay pantallas.</p><button class="pri" id="emptyAdd">＋ Añadir estación</button></div>';
+    const eb = $('#emptyAdd'); if(eb) eb.onclick = openAdd;
+  } else {
+    const html = state.boards.map(boardHTML).join('');
+    if(el.__sig !== html){ el.innerHTML = html; el.__sig = html; }
+  }
+  $('#mode').innerHTML = demoMode() ? '<span class="demo">● MODO DEMO — datos simulados. Añade tu clave API en ⚙ Ajustes.</span>' : '';
+}
+function tickClock(){
+  const t = new Date().toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'});
+  $('#clock').textContent = t;
+}
+
+/* ===== Actualización ===== */
+let lastOk = null;
+async function refreshAll(){
+  if(!state.boards.length) return;
+  let errs = 0;
+  // agrupa peticiones iguales (misma estación+línea) para no gastar cuota
+  const cache = new Map();
+  await Promise.all(state.boards.map(async b=>{
+    const k = b.stopId+'|'+b.lineId+'|'+b.routeIds.join(',');
+    try{
+      if(!cache.has(k)) cache.set(k, getDepartures(b));
+      state.data[b.uid] = {deps: await cache.get(k), err:null};
+    }catch(e){
+      errs++; state.data[b.uid] = {deps: (state.data[b.uid]||{}).deps, err:e.message};
+    }
+  }));
+  if(!errs) lastOk = new Date();
+  $('#status').textContent = errs ? 'Error al actualizar' : 'Actualizado '+lastOk.toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'});
+  render();
+}
+let timer=null;
+function schedule(){ clearInterval(timer); timer = setInterval(refreshAll, state.refresh*1000); }
+
+/* ===== Diálogo: añadir ===== */
+let curStop=null, curRoutes=[], curMode='Todos', picked=new Set(), qTimer=null;
+function openAdd(){
+  $('#q').value=''; $('#stations').innerHTML=''; $('#stepRoutes').classList.add('hide'); $('#addOk').classList.add('hide');
+  curStop=null; picked.clear();
+  if(demoMode()) renderStations(DEMO_STATIONS);
+  $('#dlgAdd').showModal(); $('#q').focus();
+}
+function renderStations(list, msg){
+  $('#stations').innerHTML = list.length ? list.map(s=>'<div class="item" data-id="'+esc(s.id)+'" data-name="'+esc(s.name)+'">📍 '+esc(s.name)+'</div>').join('') : '<div class="hint">'+esc(msg||'Sin resultados')+'</div>';
+}
+$('#q').addEventListener('input', e=>{
+  clearTimeout(qTimer);
+  const v = e.target.value.trim();
+  if(v.length<2 && !demoMode()){ $('#stations').innerHTML=''; return; }
+  qTimer = setTimeout(async()=>{
+    try{ renderStations(await searchStations(v)); }
+    catch(err){ renderStations([], err.message); }
+  }, 250);
+});
+$('#stations').addEventListener('click', async e=>{
+  const it = e.target.closest('.item'); if(!it) return;
+  curStop = {id: it.dataset.id, name: it.dataset.name};
+  $('#stName').textContent = '· '+curStop.name;
+  $('#routes').innerHTML = '<div class="hint">Cargando líneas…</div>';
+  $('#stepRoutes').classList.remove('hide');
+  picked.clear(); $('#addOk').classList.add('hide');
+  try{
+    curRoutes = await getRoutes(curStop.id);
+    curMode='Todos'; renderModes(); renderRoutes();
+  }catch(err){ $('#routes').innerHTML='<div class="hint" style="color:var(--err)">'+esc(err.message)+'</div>'; }
+});
+function renderModes(){
+  const modes = ['Todos', ...new Set(curRoutes.map(r=>r.mode))];
+  $('#modeTabs').innerHTML = modes.map(m=>'<span class="chip'+(m===curMode?' on':'')+'" data-m="'+esc(m)+'">'+esc(m)+'</span>').join('');
+}
+$('#modeTabs').addEventListener('click', e=>{ const c=e.target.closest('.chip'); if(!c) return; curMode=c.dataset.m; renderModes(); renderRoutes(); });
+function routeKey(r){ return r.lineId+'|'+r.dir; }
+function renderRoutes(){
+  const list = curRoutes.filter(r=>curMode==='Todos'||r.mode===curMode);
+  $('#routes').innerHTML = list.length ? list.map(r=>{
+    const on = picked.has(routeKey(r));
+    return '<div class="item" data-k="'+esc(routeKey(r))+'" style="'+(on?'border-color:var(--acc);background:#18223d':'')+'">'+
+      '<div class="badge'+(r.mode!=='Métro'?' sq':'')+'" style="background:#'+r.color+';color:#'+r.text+'">'+esc(r.code)+'</div>'+
+      '<span>→ '+esc(r.dir)+'</span><small>'+(on?'✓ ':'')+esc(r.mode)+'</small></div>';
+  }).join('') : '<div class="hint">No hay líneas para este filtro.</div>';
+}
+$('#routes').addEventListener('click', e=>{
+  const it = e.target.closest('.item'); if(!it||!it.dataset.k) return;
+  const k = it.dataset.k; picked.has(k)? picked.delete(k) : picked.add(k);
+  renderRoutes(); $('#addOk').classList.toggle('hide', picked.size===0);
+});
+$('#addOk').onclick = ()=>{
+  for(const r of curRoutes){
+    if(!picked.has(routeKey(r))) continue;
+    const uid = curStop.id+'|'+routeKey(r);
+    if(state.boards.some(b=>b.uid===uid)) continue;
+    state.boards.push({uid, stopId:curStop.id, stopName:curStop.name.replace(/\s*\(.*\)$/,''), lineId:r.lineId, code:r.code, color:r.color, text:r.text, mode:r.mode, dir:r.dir.replace(/\s*\([^)]*\)$/,''), routeIds:r.routeIds});
+  }
+  store.set('boards', state.boards);
+  $('#dlgAdd').close(); render(); refreshAll();
+};
+$('#addCancel').onclick = ()=>$('#dlgAdd').close();
+
+/* ===== Ajustes ===== */
+function chips(el, opts, cur, fmtFn){ el.innerHTML = opts.map(o=>'<span class="chip'+(o===cur?' on':'')+'" data-v="'+o+'">'+fmtFn(o)+'</span>').join(''); }
+let tmp = {};
+function openSet(){
+  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh};
+  chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s');
+  $('#dlgSet').showModal();
+}
+$('#cntTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.count=+c.dataset.v; chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); };
+$('#refTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.refresh=+c.dataset.v; chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s'); };
+$('#setOk').onclick = ()=>{
+  state.key = $('#apikey').value.trim(); state.count = tmp.count; state.refresh = tmp.refresh;
+  store.set('key',state.key); store.set('count',state.count); store.set('refresh',state.refresh);
+  $('#dlgSet').close(); state.data={}; schedule(); render(); refreshAll();
+};
+$('#setCancel').onclick = ()=>$('#dlgSet').close();
+
+/* ===== Eventos globales ===== */
+$('#btnAdd').onclick = openAdd; $('#btnSet').onclick = openSet;
+$('#boards').addEventListener('click', e=>{
+  const x = e.target.closest('[data-del]'); if(!x) return;
+  state.boards = state.boards.filter(b=>b.uid!==x.dataset.del); store.set('boards',state.boards); render();
+});
+$('#btnFs').onclick = ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); };
+
+/* Mantener la pantalla encendida */
+let wl=null;
+async function keepAwake(){ try{ if('wakeLock' in navigator) wl = await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ keepAwake(); refreshAll(); } });
+
+/* ===== Inicio ===== */
+(async function init(){
+  // ¿Hay servidor proxy local (servidor.py)? Entonces evita el CORS.
+  try{
+    const r = await fetch('/api/ping',{cache:'no-store'});
+    if(r.ok){ const j = await r.json(); if(j && j.ok){ state.base='/api'; state.proxy=true; } }
+  }catch(e){}
+  tickClock(); setInterval(()=>{ tickClock(); if(state.boards.length) render(); }, 1000);
+  render(); schedule(); keepAwake(); refreshAll();
+  if(!state.boards.length && !state.key) { /* primera vez: abre ajustes tras un instante */ }
+})();
+</script>
+</body>
+</html>
