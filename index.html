@@ -22,30 +22,35 @@ button:hover{border-color:#3a475f}
 button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
 button.ico{padding:7px 10px}
 main{flex:1;padding:16px;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));align-content:start}
-/* ===== Pantalla estilo RATP ===== */
-.board{border-radius:12px;overflow:hidden;background:#000;box-shadow:0 6px 22px rgba(0,0,0,.55),0 0 0 1px #2a2f3a}
-.top{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f4f4f1;color:#1d1d2b}
-.roundel{flex:none;width:34px;height:34px;border-radius:50%;border:3px solid #1d1d2b;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;line-height:1}
-.pict{flex:none;border:2px solid #1d1d2b;border-radius:6px;padding:2px 5px;font-weight:800;font-size:12px;letter-spacing:.3px}
-.badge{flex:none;min-width:34px;height:34px;padding:0 6px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;font-family:system-ui,sans-serif}
-.badge.sq{border-radius:8px}
+/* ===== Pantalla estilo RATP (compacta) ===== */
+.board{border-radius:10px;overflow:hidden;background:#000;box-shadow:0 5px 18px rgba(0,0,0,.55),0 0 0 1px #2a2f3a}
+.top{display:flex;align-items:center;gap:8px;padding:5px 6px 5px 10px;background:#f4f4f1;color:#1d1d2b}
+.roundel{flex:none;width:26px;height:26px;border-radius:50%;border:2.5px solid #1d1d2b;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;line-height:1}
+.pict{flex:none;border:2px solid #1d1d2b;border-radius:5px;padding:1px 4px;font-weight:800;font-size:10px;letter-spacing:.3px}
+.badge{flex:none;min-width:26px;height:26px;padding:0 5px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;font-family:system-ui,sans-serif}
+.badge.sq{border-radius:6px}
 .top .nm{min-width:0;flex:1}
-.top .dir{font-size:clamp(20px,5.2vw,30px);font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.top .st{font-size:13px;color:#555b69;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-.top .x{flex:none;background:transparent;border:none;color:#1d1d2b;opacity:.35;padding:4px 6px;font-size:16px;border-radius:6px}
-.top .x:hover{opacity:1;background:rgba(0,0,0,.08)}
-.panel{display:grid;min-height:112px;background:radial-gradient(120% 140% at 30% 10%,#1b2420 0%,#0a0d0c 55%,#000 100%)}
-.panel.msgwrap{display:flex;align-items:center;justify-content:center}
-.cell{position:relative;padding:28px 10px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.cell+.cell::before{content:"";position:absolute;left:0;top:34%;bottom:16%;width:2px;background:#cfd3da;border-radius:2px}
-.cell .lab{position:absolute;top:9px;left:12px;font-size:13px;color:#e9ecf1}
+.top .dir{font-size:clamp(17px,4.6vw,22px);font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .tb{flex:none;background:transparent;border:none;color:#1d1d2b;opacity:.5;padding:2px 7px;font-size:17px;line-height:1.2;border-radius:6px}
+.top .tb:hover{opacity:1;background:rgba(0,0,0,.08)}
+.panel{background:radial-gradient(120% 160% at 30% 0%,#1b2420 0%,#0a0d0c 55%,#000 100%)}
+.drow{display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;min-height:50px;border-top:1px solid rgba(255,255,255,.09)}
+.drow:first-child{border-top:none}
+.dn{flex:1;min-width:0;display:flex;align-items:center;gap:6px;color:#e9ecf1;font-size:14px;font-weight:600}
+.dn .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dn .rm{flex:none;background:none;border:none;color:#fff;opacity:.28;padding:3px 4px;font-size:11px;border-radius:4px}
+.dn .rm:hover{opacity:.9}
+.cells{display:flex;flex:none}
+.cell{position:relative;min-width:62px;padding:9px 6px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.cell+.cell::before{content:"";position:absolute;left:0;top:22%;bottom:22%;width:2px;background:#cfd3da;border-radius:2px}
+.cell .lab{position:absolute;top:2px;left:5px;font-size:10px;color:#cfd3da}
 sup{font-size:.62em;line-height:0}
-.cell .big{font-family:"Segoe UI",system-ui,sans-serif;font-style:italic;font-weight:800;font-size:clamp(54px,13vw,84px);line-height:1;letter-spacing:-2px;color:#f3b21b;text-shadow:0 0 14px rgba(243,178,27,.35);font-variant-numeric:tabular-nums}
+.cell .big{font-family:"Segoe UI",system-ui,sans-serif;font-style:italic;font-weight:800;font-size:clamp(32px,8.5vw,42px);line-height:1;letter-spacing:-1.5px;color:#f3b21b;text-shadow:0 0 12px rgba(243,178,27,.35);font-variant-numeric:tabular-nums}
 .cell.dim .big{color:#8a6a1e;text-shadow:none}
-.cell .sub{height:12px;font-size:10px;line-height:12px;color:#8a93a3;letter-spacing:.4px}
-.strip{height:10px}
-.msg{padding:30px 14px;text-align:center;font-weight:700;font-size:26px;color:#f3b21b}
-.msg.err{color:var(--err);font-size:14px;font-weight:500}
+.cell .sub{height:9px;font-size:8px;line-height:9px;color:#8a93a3;letter-spacing:.3px}
+.strip{height:7px}
+.msg{flex:none;font-weight:700;font-size:17px;color:#f3b21b;padding:0 6px}
+.msg.err{flex:1;min-width:0;color:var(--err);font-size:12px;font-weight:500}
 .empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:60px 10px}
 footer{padding:8px 18px;border-top:1px solid var(--line);color:var(--mut);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
 .demo{color:var(--led)}
@@ -67,7 +72,7 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
 .chip.on{background:var(--acc);border-color:var(--acc)}
 .actions{display:flex;gap:8px;justify-content:flex-end}
 .hide{display:none!important}
-@media (max-width:520px){main{grid-template-columns:1fr;padding:12px}.cell .lab{font-size:12px}header{padding:8px 12px;gap:8px}header h1{display:none}#clock{flex:1;font-size:24px}}
+@media (max-width:520px){main{grid-template-columns:1fr;padding:12px}header{padding:8px 12px;gap:8px}header h1{display:none}#clock{flex:1;font-size:24px}.cell{min-width:52px}.dn{font-size:13px}}
 </style>
 </head>
 <body>
@@ -98,7 +103,7 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
       <h3>2 · Línea y dirección <span id="stName" style="text-transform:none;color:var(--txt)"></span></h3>
       <div class="tabs" id="modeTabs" style="margin:8px 0"></div>
       <div class="list" id="routes"></div>
-      <div class="hint" style="margin-top:6px">Puedes marcar varias direcciones; se añadirá una pantalla por cada una.</div>
+      <div class="hint" style="margin-top:6px">Marca ambos sentidos para verlos juntos en un mismo módulo.</div>
     </div>
     <div class="actions">
       <button id="addCancel">Cerrar</button>
@@ -128,6 +133,15 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
       <button id="setCancel">Cancelar</button>
       <button class="pri" id="setOk">Guardar</button>
     </div>
+  </div>
+</dialog>
+
+<!-- Diálogo: añadir otro sentido -->
+<dialog id="dlgDir">
+  <div class="dlg">
+    <h2>Añadir sentido</h2>
+    <div class="list" id="dirList"></div>
+    <div class="actions"><button id="dirCancel">Cerrar</button></div>
   </div>
 </dialog>
 
@@ -259,39 +273,41 @@ function pictHTML(b){
   const t = {'RER':'RER','Train':'TRAIN','Tramway':'TRAM','Bus':'BUS'}[b.mode];
   return t ? '<div class="pict">'+t+'</div>' : '';
 }
-function boardHTML(b){
+function groupsOf(){
+  const m = new Map();
+  for(const b of state.boards){ const k=b.stopId+'|'+b.lineId; if(!m.has(k)) m.set(k,[]); m.get(k).push(b); }
+  return [...m.entries()];
+}
+function cellsHTML(b, now){
   const d = state.data[b.uid] || {};
-  const now = parisNow();
+  if(d.err) return '<div class="msg err">⚠ '+esc(d.err)+'</div>';
+  if(!d.deps) return '<div class="msg">…</div>';
+  const live = d.deps.filter(x => (x.t-now)/1000 > -30).slice(0,state.count);
+  if(!live.length) return '<div class="msg">Service terminé</div>';
+  let c = '<div class="cells">';
+  for(let i=0;i<state.count;i++){
+    const x = live[i];
+    c += '<div class="cell'+((!x || !x.rt) ? ' dim' : '')+'">'+
+      '<span class="lab">'+(i===0 ? '1<sup>er</sup>' : (i+1)+'<sup>e</sup>')+'</span>'+
+      '<span class="big">'+(x ? mins((x.t-now)/1000) : '–')+'</span>'+
+      '<span class="sub">'+((x && !x.rt) ? 'teórico' : '')+'</span></div>';
+  }
+  return c+'</div>';
+}
+function moduleHTML(key, list){
+  const b = list[0], now = parisNow();
   const fg = '#'+b.text, bg = '#'+b.color;
   const sq = b.mode && b.mode!=='Métro' ? ' sq' : '';
-  const noun = nounFor(b.mode);
-  let body;
-  if(d.err){
-    body = '<div class="panel msgwrap"><div class="msg err">⚠ '+esc(d.err)+'</div></div>';
-  } else if(!d.deps){
-    body = '<div class="panel msgwrap"><div class="msg">…</div></div>';
-  } else {
-    const live = d.deps.filter(x => (x.t-now)/1000 > -30).slice(0,state.count);
-    if(!live.length){
-      body = '<div class="panel msgwrap"><div class="msg">Service terminé</div></div>';
-    } else {
-      let cells = '';
-      for(let i=0;i<state.count;i++){
-        const x = live[i];
-        cells += '<div class="cell'+((!x || !x.rt) ? ' dim' : '')+'">'+
-          '<span class="lab">'+ordinal(i,noun)+'</span>'+
-          '<span class="big">'+(x ? mins((x.t-now)/1000) : '–')+'</span>'+
-          '<span class="sub">'+((x && !x.rt) ? 'teórico' : '')+'</span></div>';
-      }
-      body = '<div class="panel" style="grid-template-columns:repeat('+state.count+',1fr)">'+cells+'</div>';
-    }
-  }
-  return '<section class="board" data-uid="'+b.uid+'">'+
+  const rows = list.map(x =>
+    '<div class="drow"><div class="dn"><button class="rm" data-del="'+esc(x.uid)+'" title="Quitar este sentido">✕</button>'+
+    '<span class="t">→ '+esc(x.dir)+'</span></div>'+cellsHTML(x, now)+'</div>').join('');
+  return '<section class="board" data-key="'+esc(key)+'">'+
     '<div class="top">'+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
-    '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div><div class="st">→ '+esc(b.dir)+'</div></div>'+
-    '<button class="x" data-del="'+b.uid+'" title="Quitar">✕</button></div>'+
-    body+'<div class="strip" style="background:'+bg+'"></div></section>';
+    '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div></div>'+
+    (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
+    '<button class="tb" data-delmod="'+esc(key)+'" title="Quitar módulo">✕</button></div>'+
+    '<div class="panel">'+rows+'</div><div class="strip" style="background:'+bg+'"></div></section>';
 }
 function render(){
   const el = $('#boards');
@@ -300,7 +316,7 @@ function render(){
     el.innerHTML ='<div class="empty"><div style="font-size:42px">🚇</div><p>Aún no hay pantallas.</p><button class="pri" id="emptyAdd">＋ Añadir estación</button></div>';
     const eb = $('#emptyAdd'); if(eb) eb.onclick = openAdd;
   } else {
-    const html = state.boards.map(boardHTML).join('');
+    const html = groupsOf().map(([k,l])=>moduleHTML(k,l)).join('');
     if(el.__sig !== html){ el.innerHTML = html; el.__sig = html; }
   }
   $('#mode').innerHTML = demoMode() ? '<span class="demo">● MODO DEMO — datos simulados. Añade tu clave API en ⚙ Ajustes.</span>' : '';
@@ -385,16 +401,43 @@ $('#routes').addEventListener('click', e=>{
   const k = it.dataset.k; picked.has(k)? picked.delete(k) : picked.add(k);
   renderRoutes(); $('#addOk').classList.toggle('hide', picked.size===0);
 });
+function mkBoard(stopId, stopName, r){
+  return {uid: stopId+'|'+routeKey(r), stopId, stopName, lineId:r.lineId, code:r.code, color:r.color, text:r.text, mode:r.mode, dir:r.dir.replace(/\s*\([^)]*\)$/,''), routeIds:r.routeIds};
+}
 $('#addOk').onclick = ()=>{
   for(const r of curRoutes){
     if(!picked.has(routeKey(r))) continue;
-    const uid = curStop.id+'|'+routeKey(r);
-    if(state.boards.some(b=>b.uid===uid)) continue;
-    state.boards.push({uid, stopId:curStop.id, stopName:curStop.name.replace(/\s*\(.*\)$/,''), lineId:r.lineId, code:r.code, color:r.color, text:r.text, mode:r.mode, dir:r.dir.replace(/\s*\([^)]*\)$/,''), routeIds:r.routeIds});
+    const nb = mkBoard(curStop.id, curStop.name.replace(/\s*\(.*\)$/,''), r);
+    if(state.boards.some(b=>b.uid===nb.uid)) continue;
+    state.boards.push(nb);
   }
   store.set('boards', state.boards);
   $('#dlgAdd').close(); render(); refreshAll();
 };
+/* Añadir el otro sentido de una línea ya mostrada */
+let dirCand=[], dirBase=null;
+function pushDir(r){
+  state.boards.push(mkBoard(dirBase.stopId, dirBase.stopName, r));
+  store.set('boards', state.boards); render(); refreshAll();
+}
+async function addOtherDirection(key){
+  const [stopId, lineId] = key.split('|');
+  dirBase = state.boards.find(b=>b.stopId===stopId && b.lineId===lineId); if(!dirBase) return;
+  $('#status').textContent = 'Buscando otros sentidos…';
+  try{
+    const routes = await getRoutes(stopId);
+    dirCand = routes.filter(r=>r.lineId===lineId && !state.boards.some(b=>b.uid===stopId+'|'+routeKey(r)));
+    if(!dirCand.length){ $('#status').textContent = 'Esta línea no tiene otro sentido en esta estación.'; return; }
+    if(dirCand.length===1){ pushDir(dirCand[0]); return; }
+    $('#dirList').innerHTML = dirCand.map((r,i)=>'<div class="item" data-i="'+i+'">→ '+esc(r.dir)+'</div>').join('');
+    $('#dlgDir').showModal();
+  }catch(err){ $('#status').textContent = err.message; }
+}
+$('#dirList').addEventListener('click', e=>{
+  const it = e.target.closest('.item'); if(!it) return;
+  const r = dirCand[+it.dataset.i]; $('#dlgDir').close(); if(r) pushDir(r);
+});
+$('#dirCancel').onclick = ()=>$('#dlgDir').close();
 $('#addCancel').onclick = ()=>$('#dlgAdd').close();
 
 /* ===== Ajustes ===== */
@@ -417,8 +460,12 @@ $('#setCancel').onclick = ()=>$('#dlgSet').close();
 /* ===== Eventos globales ===== */
 $('#btnAdd').onclick = openAdd; $('#btnSet').onclick = openSet;
 $('#boards').addEventListener('click', e=>{
-  const x = e.target.closest('[data-del]'); if(!x) return;
-  state.boards = state.boards.filter(b=>b.uid!==x.dataset.del); store.set('boards',state.boards); render();
+  const x = e.target.closest('[data-del]');
+  if(x){ state.boards = state.boards.filter(b=>b.uid!==x.dataset.del); store.set('boards',state.boards); render(); return; }
+  const m = e.target.closest('[data-delmod]');
+  if(m){ state.boards = state.boards.filter(b=>(b.stopId+'|'+b.lineId)!==m.dataset.delmod); store.set('boards',state.boards); render(); return; }
+  const o = e.target.closest('[data-both]');
+  if(o) addOtherDirection(o.dataset.both);
 });
 $('#btnFs').onclick = ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); };
 
