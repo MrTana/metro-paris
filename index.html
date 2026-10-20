@@ -100,6 +100,7 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
 <footer>
   <span id="status">Cargando…</span>
   <span>Las cifras son minutos · atenuado = horario teórico</span>
+  <span id="usage"></span>
   <span id="mode"></span>
 </footer>
 
@@ -150,6 +151,11 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
       <h3>Estaciones cercanas a mostrar</h3>
       <div class="tabs" id="nnTabs"></div>
     </div>
+    <div>
+      <h3>Límite diario de peticiones de PRIM</h3>
+      <div class="tabs" id="limTabs"></div>
+      <div class="hint" style="margin-top:6px">Las cuentas nuevas tienen 1000 al día y 5 por segundo. Puedes pedir más cuota en «My API Usage» de tu cuenta PRIM; si te la suben a 20 000, elige 20 000 y la pantalla se actualizará más a menudo.</div>
+    </div>
     <div class="actions">
       <button id="setCancel">Cancelar</button>
       <button class="pri" id="setOk">Guardar</button>
@@ -187,6 +193,7 @@ const state = {
   near: store.get('near',false),
   pos: null, posT: 0, acc: 0, geoErr: null,
   radius: store.get('radius',500), nearN: store.get('nearN',2),
+  limit: store.get('limit',1000), usage: 0, rlUntil: 0, rlCount: 0, lastCalls: 0, nearRetry: null,
   nearStations: [], nearRoutes: {}, nearAt: null, nearT: 0, nearBusy: false, nearErr: null,
   coords: {}
 };
@@ -204,16 +211,49 @@ function parseNav(s){
 const demoMode = () => !state.key && !state.proxyHasKey;
 
 /* ===== API ===== */
-async function api(path){
+/* Cola: como mucho 2 peticiones a la vez y ~4 por segundo (PRIM permite 5/s en cuentas nuevas) */
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const Q = {running:0, last:0, q:[], t:null};
+function qRun(fn){ return new Promise((res,rej)=>{ Q.q.push({fn,res,rej}); qPump(); }); }
+function qPump(){
+  if(Q.running>=2 || !Q.q.length || Q.t) return;
+  const wait = Q.last + 260 - Date.now();
+  if(wait>0){ Q.t = setTimeout(()=>{ Q.t=null; qPump(); }, wait); return; }
+  const job = Q.q.shift(); Q.running++; Q.last = Date.now();
+  job.fn().then(job.res, job.rej).finally(()=>{ Q.running--; qPump(); });
+  qPump();
+}
+/* Contador de peticiones del día (hora de París) */
+function dayKey(){ return new Date(parisNow()).toISOString().slice(0,10); }
+function loadUsage(){ const u = store.get('usage',{d:'',n:0}); state.usage = (u && u.d===dayKey()) ? u.n : 0; showUsage(); }
+function bumpUsage(){
+  let u = store.get('usage',{d:'',n:0}); const d = dayKey();
+  if(!u || u.d!==d) u = {d, n:0};
+  u.n++; store.set('usage',u); state.usage = u.n; showUsage();
+}
+function showUsage(){ const e=$('#usage'); if(e) e.textContent = demoMode() ? '' : 'PRIM hoy: '+state.usage+' / '+state.limit; }
+class ApiError extends Error{ constructor(m,status){ super(m); this.status = status; } }
+async function apiOnce(path, attempt){
+  if(state.rlUntil && Date.now()<state.rlUntil)
+    throw new ApiError('Límite de peticiones de PRIM alcanzado. Reintento automático en '+Math.max(1,Math.ceil((state.rlUntil-Date.now())/60000))+' min.',429);
   const headers = state.key ? {apikey: state.key} : {};
   let r;
+  bumpUsage();
   try{ r = await fetch(state.base + path, {headers}); }
-  catch(e){ throw new Error('No se pudo conectar con la API (bloqueo CORS o sin red). Abre la página desde tu dirección de Cloudflare Pages o usa servidor.py.'); }
-  if(r.status===401 || r.status===403) throw new Error('Clave API rechazada (revisa Ajustes).');
-  if(r.status===429) throw new Error('Demasiadas peticiones; sube el intervalo de actualización.');
-  if(!r.ok) throw new Error('Error de la API ('+r.status+')');
+  catch(e){ throw new ApiError('No se pudo conectar con la API (bloqueo CORS o sin red). Abre la página desde tu dirección de Cloudflare Pages o usa servidor.py.',0); }
+  if(r.status===401 || r.status===403) throw new ApiError('Clave API rechazada (revisa Ajustes).', r.status);
+  if(r.status===429){
+    if(attempt<2){ await sleep(1500*(attempt+1)); return apiOnce(path, attempt+1); }   // por si es el límite por segundo
+    state.rlCount = (state.rlCount||0)+1;
+    const mins = Math.min(15, 2**(state.rlCount-1));   // 1, 2, 4, 8, 15 min
+    state.rlUntil = Date.now()+mins*60000;
+    throw new ApiError('Límite de peticiones de PRIM alcanzado ('+state.usage+' hoy). Reintento automático en '+mins+' min.',429);
+  }
+  if(!r.ok) throw new ApiError('Error de la API ('+r.status+')', r.status);
+  state.rlCount = 0;
   return r.json();
 }
+function api(path){ return qRun(()=>apiOnce(path,0)); }
 
 /* ---- Datos de demostración ---- */
 const DEMO_STATIONS = [
@@ -254,6 +294,8 @@ async function getRoutes(stopId){
     }
     return out;
   }
+  const rc = store.get('routesCache',{}), hit = rc[stopId];
+  if(hit && Date.now()-hit.t < 7*864e5) return hit.data;
   const j = await api('/stop_areas/'+stopId+'/routes?count=100');
   const map = new Map();
   for(const r of (j.routes||[])){
@@ -267,10 +309,28 @@ async function getRoutes(stopId){
     map.get(key).routeIds.push(r.id);
   }
   const rank = m => ({'Métro':0,'RER':1,'Train':2,'Tramway':3}[m] ?? 4);
-  return [...map.values()].sort((a,b)=> rank(a.mode)-rank(b.mode) || String(a.code).localeCompare(String(b.code),undefined,{numeric:true}) || a.dir.localeCompare(b.dir));
+  const out = [...map.values()].sort((a,b)=> rank(a.mode)-rank(b.mode) || String(a.code).localeCompare(String(b.code),undefined,{numeric:true}) || a.dir.localeCompare(b.dir));
+  rc[stopId] = {t:Date.now(), data:out};
+  const ks = Object.keys(rc); if(ks.length>80) ks.sort((x,y)=>rc[x].t-rc[y].t).slice(0,ks.length-80).forEach(k=>delete rc[k]);
+  store.set('routesCache', rc);
+  return out;
 }
 
 const depMemo = new Map();
+async function rawDeps(b){
+  let m = depMemo.get(b.stopId);
+  if(!m || Date.now()-m.t > 5000){
+    m = {t:Date.now(), p: api('/stop_areas/'+b.stopId+'/departures?data_freshness=realtime&count=200&duration=7200')};
+    depMemo.set(b.stopId, m);
+  }
+  try{ return await m.p; }
+  catch(err){
+    if(err.status!==400) throw err;   // plan B: una petición por línea
+    const k = b.stopId+'|'+b.lineId; let m2 = depMemo.get(k);
+    if(!m2 || Date.now()-m2.t > 5000){ m2 = {t:Date.now(), p: api('/lines/'+b.lineId+'/stop_areas/'+b.stopId+'/departures?data_freshness=realtime&count=40&duration=7200')}; depMemo.set(k,m2); }
+    return m2.p;
+  }
+}
 async function getDepartures(b){
   if(demoMode() || b.stopId.startsWith('demo:')){
     const now = parisNow();
@@ -281,9 +341,7 @@ async function getDepartures(b){
     // algunas demos a la hora de servicio terminado: no aplica; siempre simulamos servicio
     return out;
   }
-  const mk = b.stopId+'|'+b.lineId; let m = depMemo.get(mk);
-  if(!m || Date.now()-m.t > 5000){ m = {t:Date.now(), p: api('/lines/'+b.lineId+'/stop_areas/'+b.stopId+'/departures?data_freshness=realtime&count=40&duration=7200')}; depMemo.set(mk,m); }
-  const j = await m.p;
+  const j = await rawDeps(b);
   const ids = new Set(b.routeIds);
   return (j.departures||[])
     .filter(d => ids.has(d.route && d.route.id))
@@ -308,7 +366,7 @@ function groupsOf(){
 }
 function cellsHTML(b, now){
   const d = state.data[b.uid] || {};
-  if(d.err) return '<div class="msg err">⚠ '+esc(d.err)+'</div>';
+  if(d.err && !d.deps) return '<div class="msg err">⚠ '+esc(d.err)+'</div>';
   if(!d.deps) return '<div class="msg">…</div>';
   const live = d.deps.filter(x => (x.t-now)/1000 > -30).slice(0,state.count);
   if(!live.length) return '<div class="msg">Service terminé</div>';
@@ -356,12 +414,18 @@ async function nearbyStations(pos, R){
     return DEMO_STATIONS.map(st=>({id:st.id, name:st.name, ...DEMO_COORDS[st.id]}))
       .map(st=>({...st, d:distM(pos,st)})).filter(st=>st.d<=R).sort((a,b)=>a.d-b.d);
   }
+  const ck = pos.lat.toFixed(3)+','+pos.lon.toFixed(3)+','+R, nc = store.get('nearCache',{}), hit = nc[ck];
+  if(hit && Date.now()-hit.t < 6*3600*1000) return hit.list;
   const q = seg => '/'+seg+'/'+pos.lon+';'+pos.lat+'/places_nearby?type[]=stop_area&distance='+R+'&count=50';
-  let j; try{ j = await api(q('coords')); }catch(e){ j = await api(q('coord')); }
-  return (j.places_nearby || j.places || []).filter(p=>p.embedded_type==='stop_area').map(p=>{
+  let j; try{ j = await api(q('coords')); }catch(e){ if(e.status===429||e.status===401||e.status===403||e.status===0) throw e; j = await api(q('coord')); }
+  const list = (j.places_nearby || j.places || []).filter(p=>p.embedded_type==='stop_area').map(p=>{
     const c = p.stop_area && p.stop_area.coord, lat = c?+c.lat:NaN, lon = c?+c.lon:NaN;
     return {id:p.id, name:p.name, lat, lon, d: isFinite(lat) ? distM(pos,{lat,lon}) : (+p.distance||0)};
   }).sort((a,b)=>a.d-b.d);
+  nc[ck] = {t:Date.now(), list};
+  const ks = Object.keys(nc); if(ks.length>20) ks.sort((x,y)=>nc[x].t-nc[y].t).slice(0,ks.length-20).forEach(k=>delete nc[k]);
+  store.set('nearCache', nc);
+  return list;
 }
 /* Busca las N estaciones más cercanas (≤R m) que tengan metro, RER, tren o tranvía */
 async function discoverNear(force){
@@ -372,8 +436,8 @@ async function discoverNear(force){
   try{
     const cands = await nearbyStations(pos, state.radius);
     const stations = [], routesBy = {};
-    for(let i=0; i<cands.length && stations.length<state.nearN && i<16; i+=4){
-      const batch = cands.slice(i,i+4);
+    for(let i=0; i<cands.length && stations.length<state.nearN && i<12; i+=3){
+      const batch = cands.slice(i,i+3);
       const res = await Promise.all(batch.map(c=>getRoutes(c.id).then(r=>r,()=>[])));
       batch.forEach((c,j)=>{
         if(stations.length>=state.nearN) return;
@@ -386,7 +450,11 @@ async function discoverNear(force){
     }
     state.nearStations = stations; state.nearRoutes = routesBy;
     state.nearAt = pos; state.nearT = Date.now();
-  }catch(e){ state.nearErr = e.message; }
+  }catch(e){
+    state.nearErr = e.message;
+    clearTimeout(state.nearRetry);
+    state.nearRetry = setTimeout(()=>discoverNear(true), Math.max(60000, (state.rlUntil||0)-Date.now()+1500));
+  }
   state.nearBusy = false; updateGeoBar(); render(); refreshAll();
 }
 function allBoards(){
@@ -473,12 +541,23 @@ function tickClock(){
 }
 
 /* ===== Actualización ===== */
-let lastOk = null;
+let lastOk = null, lastRefreshT = 0;
+function fmtSecs(ms){ return ms>=120000 ? Math.round(ms/60000)+' min' : Math.round(ms/1000)+' s'; }
+/* Intervalo real: el elegido, o más largo si hace falta para no pasarse de la cuota diaria */
+function nextDelay(){
+  const base = state.refresh*1000;
+  const eff = state.lastCalls * 64800 / (state.limit*0.8) * 1000;   // ~18 h de uso al día, 80 % de la cuota
+  let d = Math.max(base, eff);
+  if(state.usage > state.limit*0.95) d = Math.max(d, 900000);
+  if(state.rlUntil > Date.now()) d = Math.max(d, state.rlUntil-Date.now()+1000);
+  return d;
+}
 async function refreshAll(){
   const boards = allBoards();
   if(!boards.length) return;
-  let errs = 0;
-  // agrupa peticiones iguales (misma estación+línea) para no gastar cuota
+  lastRefreshT = Date.now();
+  state.lastCalls = demoMode() ? 0 : new Set(boards.map(b=>b.stopId)).size;
+  let errs = 0, firstErr = '';
   const cache = new Map();
   await Promise.all(boards.map(async b=>{
     const k = b.stopId+'|'+b.lineId+'|'+b.routeIds.join(',');
@@ -486,15 +565,22 @@ async function refreshAll(){
       if(!cache.has(k)) cache.set(k, getDepartures(b));
       state.data[b.uid] = {deps: await cache.get(k), err:null};
     }catch(e){
-      errs++; state.data[b.uid] = {deps: (state.data[b.uid]||{}).deps, err:e.message};
+      errs++; if(!firstErr) firstErr = e.message;
+      state.data[b.uid] = {deps: (state.data[b.uid]||{}).deps, err:e.message};
     }
   }));
   if(!errs) lastOk = new Date();
-  $('#status').textContent = errs ? 'Error al actualizar' : 'Actualizado '+lastOk.toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'});
+  const d = nextDelay();
+  let t = errs ? '⚠ '+firstErr : 'Actualizado '+lastOk.toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'});
+  if(!errs && d > state.refresh*1000+1000) t += ' · intervalo ajustado a '+fmtSecs(d)+' por tu cuota diaria ('+state.limit+')';
+  $('#status').textContent = t;
   render();
 }
 let timer=null;
-function schedule(){ clearInterval(timer); timer = setInterval(refreshAll, state.refresh*1000); }
+function schedule(){
+  clearTimeout(timer);
+  timer = setTimeout(async()=>{ if(!document.hidden) await refreshAll(); schedule(); }, nextDelay());
+}
 
 /* ===== Diálogo: añadir ===== */
 let curStop=null, curRoutes=[], curMode='Todos', picked=new Set(), qTimer=null;
@@ -591,19 +677,21 @@ $('#addCancel').onclick = ()=>$('#dlgAdd').close();
 function chips(el, opts, cur, fmtFn){ el.innerHTML = opts.map(o=>'<span class="chip'+(o===cur?' on':'')+'" data-v="'+o+'">'+fmtFn(o)+'</span>').join(''); }
 let tmp = {};
 function openSet(){
-  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh, radius:state.radius, nearN:state.nearN};
+  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh, radius:state.radius, nearN:state.nearN, limit:state.limit};
   chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s');
-  chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v);
+  chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES'));
   $('#dlgSet').showModal();
 }
 $('#cntTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.count=+c.dataset.v; chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); };
 $('#refTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.refresh=+c.dataset.v; chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s'); };
 $('#radTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.radius=+c.dataset.v; chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); };
 $('#nnTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.nearN=+c.dataset.v; chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); };
+$('#limTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.limit=+c.dataset.v; chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES')); };
 $('#setOk').onclick = ()=>{
   state.key = $('#apikey').value.trim(); state.count = tmp.count; state.refresh = tmp.refresh;
   store.set('key',state.key); store.set('count',state.count); store.set('refresh',state.refresh);
   const geoChanged = state.radius!==tmp.radius || state.nearN!==tmp.nearN;
+  state.limit = tmp.limit; store.set('limit',state.limit); showUsage();
   state.radius = tmp.radius; state.nearN = tmp.nearN; store.set('radius',state.radius); store.set('nearN',state.nearN);
   $('#dlgSet').close(); state.data={}; schedule(); render(); refreshAll();
   if(geoChanged){ state.nearAt=null; state.nearStations=[]; state.nearRoutes={}; updateGeoBar(); discoverNear(true); }
@@ -690,7 +778,7 @@ $('#btnFs').onclick = ()=>{ if(document.fullscreenElement) document.exitFullscre
 /* Mantener la pantalla encendida */
 let wl=null;
 async function keepAwake(){ try{ if('wakeLock' in navigator) wl = await navigator.wakeLock.request('screen'); }catch(e){} }
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ keepAwake(); refreshAll(); } });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ keepAwake(); if(Date.now()-lastRefreshT>30000) refreshAll(); } });
 
 /* ===== Inicio ===== */
 (async function init(){
@@ -699,7 +787,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
     const r = await fetch('/api/ping',{cache:'no-store'});
     if(r.ok){ const j = await r.json(); if(j && j.ok){ state.base='/api'; state.proxy=true; } }
   }catch(e){}
-  tickClock(); setInterval(()=>{ tickClock(); if(state.boards.length) render(); }, 1000);
+  loadUsage(); tickClock(); setInterval(()=>{ tickClock(); if(state.boards.length) render(); }, 1000);
   render(); schedule(); keepAwake(); syncNearBtn(); updateGeoBar(); if(state.near) startGeo(); refreshAll();
   if(!state.boards.length && !state.key) { /* primera vez: abre ajustes tras un instante */ }
 })();
