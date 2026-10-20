@@ -51,6 +51,7 @@ sup{font-size:.62em;line-height:0}
 .strip{height:7px}
 .geobar{padding:6px 18px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line)}
 .geobar.err{color:var(--err)}
+.sect .lnk{background:none;border:none;color:#8fa4ff;padding:0;font:inherit;cursor:pointer;text-decoration:underline}
 .sect{grid-column:1/-1;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut);margin:2px 2px -4px}
 button.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .board.near{box-shadow:0 5px 18px rgba(0,0,0,.55),0 0 0 2px #4a6cf7}
@@ -193,7 +194,7 @@ const state = {
   near: store.get('near',false),
   pos: null, posT: 0, acc: 0, geoErr: null,
   radius: store.get('radius',500), nearN: store.get('nearN',2),
-  limit: store.get('limit',20000), usage: 0, rlUntil: 0, rlCount: 0, lastCalls: 0, nearRetry: null,
+  limit: store.get('limit',20000), hidden: store.get('hidden',[]), usage: 0, rlUntil: 0, rlCount: 0, lastCalls: 0, nearRetry: null,
   nearStations: [], nearRoutes: {}, nearAt: null, nearT: 0, nearBusy: false, nearErr: null,
   coords: {}
 };
@@ -386,14 +387,14 @@ function moduleHTML(key, list, opt){
   const fg = '#'+b.text, bg = '#'+b.color;
   const sq = b.mode && b.mode!=='Métro' ? ' sq' : '';
   const rows = list.map(x =>
-    '<div class="drow"><div class="dn">'+(opt.auto?'':'<button class="rm" data-del="'+esc(x.uid)+'" title="Quitar este sentido">✕</button>')+
+    '<div class="drow"><div class="dn">'+'<button class="rm" '+(opt.auto?'data-hide':'data-del')+'="'+esc(x.uid)+'" title="'+(opt.auto?'Ocultar':'Quitar')+' este sentido">✕</button>'+
     '<span class="t">→ '+esc(x.dir)+'</span></div>'+cellsHTML(x, now)+'</div>').join('');
   return '<section class="board'+(opt.near?' near':'')+'" data-key="'+esc(key)+'">'+
     '<div class="top">'+(opt.near?'':'<span class="grip" data-grip title="Arrastra para reordenar"></span>')+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
     '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div></div>'+
     (opt.near && isFinite(opt.dist) ? '<span class="dist">'+fmtDist(opt.dist)+'</span>' : '')+
-    (opt.auto ? '<button class="tb" data-pin="'+esc(key)+'" title="Guardar en Tus estaciones">＋</button>' :
+    (opt.auto ? '<button class="tb" data-pin="'+esc(key)+'" title="Guardar en Tus estaciones">＋</button><button class="tb" data-hidemod="'+esc(key)+'" title="Ocultar esta línea">✕</button>' :
       (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
       '<button class="tb" data-delmod="'+esc(key)+'" title="Quitar módulo">✕</button>')+'</div>'+
     '<div class="panel">'+rows+'</div><div class="strip" style="background:'+bg+'"></div></section>';
@@ -464,12 +465,15 @@ function allBoards(){
   return [...m.values()];
 }
 function layoutHTML(){
-  const saved = groupsOf(), savedMap = new Map(saved), near = [];
+  const saved = groupsOf(), savedMap = new Map(saved), near = [], hid = new Set(state.hidden);
   if(state.near && state.pos){
     for(const st of state.nearStations){
       const d = isFinite(st.lat) ? distM(state.pos,st) : st.d, lines = new Map();
       for(const b of (state.nearRoutes[st.id]||[])){ const k=b.stopId+'|'+b.lineId; if(!lines.has(k)) lines.set(k,[]); lines.get(k).push(b); }
-      for(const [k,l] of lines) near.push(savedMap.has(k) ? {k, l:savedMap.get(k), d, auto:false} : {k, l, d, auto:true});
+      for(const [k,l] of lines){
+        if(savedMap.has(k)) near.push({k, l:savedMap.get(k), d, auto:false});
+        else { const vis = l.filter(b=>!hid.has(b.uid)); if(vis.length) near.push({k, l:vis, d, auto:true}); }
+      }
     }
   }
   const nearKeys = new Set(near.map(x=>x.k));
@@ -479,6 +483,9 @@ function layoutHTML(){
     h += '<div class="sect">📍 Más cerca de ti · a menos de '+state.radius+' m</div>';
     if(near.length) h += near.map(x=>moduleHTML(x.k,x.l,{near:true,auto:x.auto,dist:x.d})).join('');
     else h += '<div class="sect" style="text-transform:none;letter-spacing:0;font-size:13px">'+(state.nearBusy ? 'Buscando estaciones…' : 'No hay estaciones de metro, RER o tren a menos de '+state.radius+' m.')+'</div>';
+    let hn = 0;
+    for(const id in state.nearRoutes) for(const b of state.nearRoutes[id]) if(hid.has(b.uid) && !savedMap.has(b.stopId+'|'+b.lineId)) hn++;
+    if(hn) h += '<div class="sect" style="text-transform:none;letter-spacing:0;font-size:13px"><button class="lnk" data-unhide>↺ Mostrar '+(hn===1?'el sentido oculto':'los '+hn+' sentidos ocultos')+'</button></div>';
     if(rest.length) h += '<div class="sect">Tus estaciones</div>';
   }
   return h + rest.map(x=>moduleHTML(x.k,x.l)).join('');
@@ -709,13 +716,25 @@ $('#boards').addEventListener('click', e=>{
   if(x){ state.boards = state.boards.filter(b=>b.uid!==x.dataset.del); store.set('boards',state.boards); render(); return; }
   const m = e.target.closest('[data-delmod]');
   if(m){ state.boards = state.boards.filter(b=>(b.stopId+'|'+b.lineId)!==m.dataset.delmod); store.set('boards',state.boards); render(); return; }
+  const hd = e.target.closest('[data-hide]');
+  if(hd){ if(!state.hidden.includes(hd.dataset.hide)) state.hidden.push(hd.dataset.hide); store.set('hidden',state.hidden); render(); return; }
+  const hm = e.target.closest('[data-hidemod]');
+  if(hm){
+    const [sid,lid] = hm.dataset.hidemod.split('|');
+    for(const id in state.nearRoutes) for(const b of state.nearRoutes[id]) if(b.stopId===sid && b.lineId===lid && !state.hidden.includes(b.uid)) state.hidden.push(b.uid);
+    store.set('hidden',state.hidden); render(); return;
+  }
+  if(e.target.closest('[data-unhide]')){
+    const ids = new Set(); for(const id in state.nearRoutes) for(const b of state.nearRoutes[id]) ids.add(b.uid);
+    state.hidden = state.hidden.filter(u=>!ids.has(u)); store.set('hidden',state.hidden); render(); return;
+  }
   const o = e.target.closest('[data-both]');
   if(o){ addOtherDirection(o.dataset.both); return; }
   const pn = e.target.closest('[data-pin]');
   if(pn){
     const [sid,lid] = pn.dataset.pin.split('|');
     for(const id in state.nearRoutes) for(const b of state.nearRoutes[id])
-      if(b.stopId===sid && b.lineId===lid && !state.boards.some(x=>x.uid===b.uid)) state.boards.push({...b});
+      if(b.stopId===sid && b.lineId===lid && !state.hidden.includes(b.uid) && !state.boards.some(x=>x.uid===b.uid)) state.boards.push({...b});
     store.set('boards', state.boards); render(); refreshAll();
   }
 });
