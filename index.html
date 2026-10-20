@@ -49,6 +49,8 @@ sup{font-size:.62em;line-height:0}
 .cell.dim .big{color:#8a6a1e;text-shadow:none}
 .cell .sub{height:9px;font-size:8px;line-height:9px;color:#8a93a3;letter-spacing:.3px}
 .strip{height:7px}
+.geobar{padding:6px 18px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line)}
+.geobar.err{color:var(--err)}
 .sect{grid-column:1/-1;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut);margin:2px 2px -4px}
 button.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .board.near{box-shadow:0 5px 18px rgba(0,0,0,.55),0 0 0 2px #4a6cf7}
@@ -93,11 +95,11 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
   <button class="ico" id="btnSet" title="Ajustes">⚙</button>
   <button class="ico" id="btnFs" title="Pantalla completa">⛶</button>
 </header>
+<div id="geoBar" class="geobar hide"></div>
 <main id="boards"></main>
 <footer>
   <span id="status">Cargando…</span>
   <span>Las cifras son minutos · atenuado = horario teórico</span>
-  <span id="geo"></span>
   <span id="mode"></span>
 </footer>
 
@@ -175,7 +177,7 @@ const state = {
   proxy: false,
   data: {},   // por id de pantalla
   near: store.get('near',false),
-  pos: null, posT: 0,
+  pos: null, posT: 0, acc: 0, geoErr: null, coordFail: [], coordTry: {},
   coords: store.get('coords',{})
 };
 
@@ -229,7 +231,7 @@ async function searchStations(q){
     return DEMO_STATIONS.filter(s=>s.name.toLowerCase().includes(n));
   }
   const j = await api('/places?q='+encodeURIComponent(q)+'&type[]=stop_area&count=8');
-  return (j.places||[]).filter(p=>p.embedded_type==='stop_area').map(p=>({id:p.id,name:p.name}));
+  return (j.places||[]).filter(p=>p.embedded_type==='stop_area').map(p=>{ const c=p.stop_area&&p.stop_area.coord; return {id:p.id,name:p.name,lat:c?+c.lat:null,lon:c?+c.lon:null}; });
 }
 
 async function getRoutes(stopId){
@@ -351,38 +353,84 @@ function layoutHTML(){
   }
   return h + rest.map(x=>moduleHTML(x.k,x.l)).join('');
 }
+async function coordFor(b){
+  const id = b.stopId;
+  if(id.startsWith('demo:')) return DEMO_COORDS[id] || null;
+  try{   // 1) búsqueda de PRIM (la misma llamada que usa el buscador de estaciones)
+    const j = await api('/places?q='+encodeURIComponent(b.stopName)+'&type[]=stop_area&count=10');
+    const p = (j.places||[]).find(x=>x.id===id), c = p && p.stop_area && p.stop_area.coord;
+    if(c && isFinite(+c.lat) && isFinite(+c.lon)) return {lat:+c.lat, lon:+c.lon};
+  }catch(e){}
+  try{   // 2) ficha de la estación
+    const j = await api('/stop_areas/'+id), c = j.stop_areas && j.stop_areas[0] && j.stop_areas[0].coord;
+    if(c && isFinite(+c.lat) && isFinite(+c.lon)) return {lat:+c.lat, lon:+c.lon};
+  }catch(e){}
+  return null;
+}
+let ensuring = false;
 async function ensureCoords(){
-  const miss = [...new Set(state.boards.map(b=>b.stopId))].filter(id=>!state.coords[id]);
-  if(!miss.length) return;
-  await Promise.all(miss.map(async id=>{
-    try{
-      if(id.startsWith('demo:')){ if(DEMO_COORDS[id]) state.coords[id]=DEMO_COORDS[id]; return; }
-      const j = await api('/stop_areas/'+id);
-      const c = j.stop_areas && j.stop_areas[0] && j.stop_areas[0].coord;
-      if(c) state.coords[id] = {lat:+c.lat, lon:+c.lon};
-    }catch(e){}
-  }));
-  store.set('coords', state.coords); render();
+  if(ensuring) return; ensuring = true;
+  try{
+    const seen = new Set(), now = Date.now();
+    const miss = state.boards.filter(b=>{
+      if(state.coords[b.stopId] || seen.has(b.stopId)) return false;
+      if(state.coordTry[b.stopId] && now-state.coordTry[b.stopId] < 300000) return false;
+      seen.add(b.stopId); return true;
+    });
+    if(miss.length){
+      state.coordFail = [];
+      await Promise.all(miss.map(async b=>{
+        state.coordTry[b.stopId] = Date.now();
+        const c = await coordFor(b);
+        if(c) state.coords[b.stopId] = c; else state.coordFail.push(b.stopName);
+      }));
+      store.set('coords', state.coords);
+    }
+  } finally { ensuring = false; }
+  render(); updateGeoBar();
+}
+function updateGeoBar(){
+  const bar = $('#geoBar'); if(!bar) return;
+  let t = '', err = false;
+  if(state.geoErr){ t = state.geoErr; err = true; }
+  else if(!state.near){ bar.className = 'geobar hide'; return; }
+  else if(!state.pos){ t = '📍 Buscando tu ubicación… Si el navegador te lo pide, acepta el permiso.'; }
+  else {
+    const missing = [...new Set(state.boards.map(b=>b.stopId))].filter(id=>!state.coords[id]).length;
+    if(missing && state.coordFail.length && !ensuring){ t = '📍 No pude obtener la posición de: '+state.coordFail.join(', ')+'.'; err = true; }
+    else if(missing){ t = '📍 Ubicación lista. Cargando la posición de tus estaciones…'; }
+    else t = '📍 Ubicación activa (±'+state.acc+' m)';
+  }
+  bar.textContent = t; bar.className = 'geobar'+(err?' err':'');
 }
 let geoId = null;
-function setGeo(t){ const e=$('#geo'); if(e) e.textContent = t; }
 function stopGeo(){
   if(geoId!==null && navigator.geolocation){ navigator.geolocation.clearWatch(geoId); }
-  geoId = null; state.pos = null; setGeo('');
+  geoId = null; state.pos = null;
 }
 function startGeo(){
-  if(!navigator.geolocation){ setGeo('📍 Este navegador no permite la ubicación.'); state.near=false; store.set('near',false); syncNearBtn(); return; }
+  state.geoErr = null;
+  if(!navigator.geolocation){ state.geoErr = '📍 Este navegador no permite la ubicación.'; state.near = false; store.set('near',false); syncNearBtn(); updateGeoBar(); return; }
   if(geoId!==null) return;
-  setGeo('📍 Buscando tu ubicación…'); ensureCoords();
-  geoId = navigator.geolocation.watchPosition(pos=>{
+  updateGeoBar(); ensureCoords();
+  const ok = pos=>{
+    state.geoErr = null; state.acc = Math.round(pos.coords.accuracy);
     const n = {lat:pos.coords.latitude, lon:pos.coords.longitude};
-    setGeo('📍 Ubicación activa (±'+Math.round(pos.coords.accuracy)+' m)');
-    if(!state.pos || distM(state.pos,n)>15 || Date.now()-state.posT>20000){ state.pos=n; state.posT=Date.now(); render(); }
-  }, err=>{
-    if(err.code===1){ stopGeo(); state.near=false; store.set('near',false); syncNearBtn(); render(); setGeo('📍 Permiso de ubicación denegado. Actívalo en los ajustes del sitio del navegador.'); }
-    else if(err.code===2){ setGeo('📍 No se pudo obtener la ubicación.'); }
-    else { setGeo('📍 Tardando en obtener la ubicación…'); }
-  }, {enableHighAccuracy:true, maximumAge:15000, timeout:30000});
+    if(!state.pos || distM(state.pos,n)>15 || Date.now()-state.posT>20000){ state.pos = n; state.posT = Date.now(); render(); }
+    updateGeoBar();
+  };
+  const bad = err=>{
+    if(err.code===1){
+      stopGeo(); state.near = false; store.set('near',false); syncNearBtn(); render();
+      state.geoErr = '📍 Permiso de ubicación denegado. Actívalo desde el candado junto a la dirección (Permisos → Ubicación) y vuelve a pulsar 📍.';
+    } else if(err.code===2){ state.geoErr = '📍 No se pudo obtener la ubicación. ¿Tienes la ubicación activada en el móvil?'; }
+    else if(!state.pos){ state.geoErr = '📍 Tardando en obtener la ubicación…'; }
+    updateGeoBar();
+  };
+  // Baja precisión (red/WiFi): más rápida y suficiente para estaciones; funciona también en interiores
+  const opts = {enableHighAccuracy:false, maximumAge:30000, timeout:20000};
+  navigator.geolocation.getCurrentPosition(ok, bad, opts);
+  geoId = navigator.geolocation.watchPosition(ok, bad, {enableHighAccuracy:false, maximumAge:30000, timeout:60000});
 }
 function syncNearBtn(){ $('#btnNear').classList.toggle('on', !!state.near); }
 function render(){
@@ -436,7 +484,7 @@ function openAdd(){
   $('#dlgAdd').showModal(); $('#q').focus();
 }
 function renderStations(list, msg){
-  $('#stations').innerHTML = list.length ? list.map(s=>'<div class="item" data-id="'+esc(s.id)+'" data-name="'+esc(s.name)+'">📍 '+esc(s.name)+'</div>').join('') : '<div class="hint">'+esc(msg||'Sin resultados')+'</div>';
+  $('#stations').innerHTML = list.length ? list.map(s=>'<div class="item" data-id="'+esc(s.id)+'" data-name="'+esc(s.name)+'" data-lat="'+(s.lat==null?'':s.lat)+'" data-lon="'+(s.lon==null?'':s.lon)+'">📍 '+esc(s.name)+'</div>').join('') : '<div class="hint">'+esc(msg||'Sin resultados')+'</div>';
 }
 $('#q').addEventListener('input', e=>{
   clearTimeout(qTimer);
@@ -449,7 +497,7 @@ $('#q').addEventListener('input', e=>{
 });
 $('#stations').addEventListener('click', async e=>{
   const it = e.target.closest('.item'); if(!it) return;
-  curStop = {id: it.dataset.id, name: it.dataset.name};
+  curStop = {id: it.dataset.id, name: it.dataset.name, lat: it.dataset.lat!==''?+it.dataset.lat:null, lon: it.dataset.lon!==''?+it.dataset.lon:null};
   $('#stName').textContent = '· '+curStop.name;
   $('#routes').innerHTML = '<div class="hint">Cargando líneas…</div>';
   $('#stepRoutes').classList.remove('hide');
@@ -489,6 +537,7 @@ $('#addOk').onclick = ()=>{
     if(state.boards.some(b=>b.uid===nb.uid)) continue;
     state.boards.push(nb);
   }
+  if(curStop.lat!=null && isFinite(curStop.lat) && isFinite(curStop.lon)){ state.coords[curStop.id] = {lat:curStop.lat, lon:curStop.lon}; store.set('coords', state.coords); }
   store.set('boards', state.boards);
   $('#dlgAdd').close(); render(); refreshAll();
 };
@@ -537,8 +586,8 @@ $('#setCancel').onclick = ()=>$('#dlgSet').close();
 
 /* ===== Eventos globales ===== */
 $('#btnNear').onclick = ()=>{
-  state.near = !state.near; store.set('near', state.near); syncNearBtn();
-  if(state.near) startGeo(); else { stopGeo(); render(); }
+  state.near = !state.near; store.set('near', state.near); syncNearBtn(); state.geoErr = null;
+  if(state.near) startGeo(); else { stopGeo(); render(); updateGeoBar(); }
 };
 $('#btnAdd').onclick = openAdd; $('#btnSet').onclick = openSet;
 $('#boards').addEventListener('click', e=>{
@@ -618,7 +667,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
     if(r.ok){ const j = await r.json(); if(j && j.ok){ state.base='/api'; state.proxy=true; } }
   }catch(e){}
   tickClock(); setInterval(()=>{ tickClock(); if(state.boards.length) render(); }, 1000);
-  render(); schedule(); keepAwake(); syncNearBtn(); if(state.near) startGeo(); refreshAll();
+  render(); schedule(); keepAwake(); syncNearBtn(); updateGeoBar(); if(state.near) startGeo(); refreshAll();
   if(!state.boards.length && !state.key) { /* primera vez: abre ajustes tras un instante */ }
 })();
 </script>
