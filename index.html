@@ -49,6 +49,11 @@ sup{font-size:.62em;line-height:0}
 .cell.dim .big{color:#8a6a1e;text-shadow:none}
 .cell .sub{height:9px;font-size:8px;line-height:9px;color:#8a93a3;letter-spacing:.3px}
 .strip{height:7px}
+.grip{flex:none;box-sizing:content-box;width:14px;height:22px;padding:0 5px;margin-left:-5px;background:radial-gradient(circle,#1d1d2b 1.5px,transparent 1.7px) 0 0/7px 7px;background-clip:content-box;opacity:.4;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.grip:hover{opacity:.85}
+.board.ph{opacity:.25}
+.board.floating{position:fixed;z-index:100;margin:0;pointer-events:none;box-shadow:0 14px 40px rgba(0,0,0,.7);transform:scale(1.02) rotate(-.4deg)}
+body.dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 .msg{flex:none;font-weight:700;font-size:17px;color:#f3b21b;padding:0 6px}
 .msg.err{flex:1;min-width:0;color:var(--err);font-size:12px;font-weight:500}
 .empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:60px 10px}
@@ -302,7 +307,7 @@ function moduleHTML(key, list){
     '<div class="drow"><div class="dn"><button class="rm" data-del="'+esc(x.uid)+'" title="Quitar este sentido">✕</button>'+
     '<span class="t">→ '+esc(x.dir)+'</span></div>'+cellsHTML(x, now)+'</div>').join('');
   return '<section class="board" data-key="'+esc(key)+'">'+
-    '<div class="top">'+pictHTML(b)+
+    '<div class="top"><span class="grip" data-grip title="Arrastra para reordenar"></span>'+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
     '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div></div>'+
     (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
@@ -310,6 +315,7 @@ function moduleHTML(key, list){
     '<div class="panel">'+rows+'</div><div class="strip" style="background:'+bg+'"></div></section>';
 }
 function render(){
+  if(state.dragging) return;
   const el = $('#boards');
   if(!state.boards.length){
     el.__sig = null;
@@ -467,6 +473,57 @@ $('#boards').addEventListener('click', e=>{
   const o = e.target.closest('[data-both]');
   if(o) addOtherDirection(o.dataset.both);
 });
+/* ===== Reordenar módulos arrastrando el asa ===== */
+let drag = null;
+$('#boards').addEventListener('pointerdown', e=>{
+  const g = e.target.closest('[data-grip]'); if(!g || drag) return;
+  const sec = g.closest('.board'); if(!sec) return;
+  e.preventDefault();
+  const r = sec.getBoundingClientRect();
+  const clone = sec.cloneNode(true);
+  clone.classList.add('floating');
+  clone.style.width = r.width+'px'; clone.style.left = r.left+'px'; clone.style.top = r.top+'px';
+  document.body.appendChild(clone);
+  sec.classList.add('ph'); document.body.classList.add('dragging');
+  drag = {sec, clone, dx:e.clientX-r.left, dy:e.clientY-r.top, x:e.clientX, y:e.clientY, pid:e.pointerId, last:0, raf:0};
+  state.dragging = true;
+  try{ g.setPointerCapture(e.pointerId); }catch(_){}
+  drag.raf = requestAnimationFrame(dragTick);
+});
+window.addEventListener('pointermove', e=>{
+  if(!drag || e.pointerId!==drag.pid) return;
+  drag.x = e.clientX; drag.y = e.clientY;
+  drag.clone.style.left = (e.clientX-drag.dx)+'px'; drag.clone.style.top = (e.clientY-drag.dy)+'px';
+});
+function dragTick(){
+  if(!drag) return;
+  const {x,y} = drag, main = $('#boards'), edge = 70, vh = window.innerHeight;
+  if(y < edge) window.scrollBy(0, -Math.ceil((edge-y)/6));
+  else if(y > vh-edge) window.scrollBy(0, Math.ceil((y-(vh-edge))/6));
+  const el = document.elementFromPoint(x,y);
+  const t = el && el.closest ? el.closest('.board') : null;
+  if(t && t!==drag.sec && t.parentNode===main && performance.now()-drag.last > 120){
+    const kids = [...main.children], si = kids.indexOf(drag.sec), ti = kids.indexOf(t);
+    const cols = getComputedStyle(main).gridTemplateColumns.split(' ').length;
+    let go = true;
+    if(cols===1){ const r = t.getBoundingClientRect(), mid = r.top + r.height/2; go = ti>si ? y>mid : y<mid; }
+    if(go){ main.insertBefore(drag.sec, ti>si ? t.nextSibling : t); drag.last = performance.now(); }
+  }
+  drag.raf = requestAnimationFrame(dragTick);
+}
+function endDrag(e){
+  if(!drag || (e && e.pointerId!==drag.pid)) return;
+  cancelAnimationFrame(drag.raf);
+  drag.clone.remove(); drag.sec.classList.remove('ph'); document.body.classList.remove('dragging');
+  const pos = new Map([...$('#boards').children].map((c,i)=>[c.dataset.key,i]));
+  const gk = b => b.stopId+'|'+b.lineId;
+  state.boards = state.boards.map((b,i)=>({b,i})).sort((a,c)=> (pos.get(gk(a.b))-pos.get(gk(c.b))) || (a.i-c.i)).map(o=>o.b);
+  store.set('boards', state.boards);
+  drag = null; state.dragging = false;
+  $('#boards').__sig = null; render();
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
 $('#btnFs').onclick = ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); };
 
 /* Mantener la pantalla encendida */
