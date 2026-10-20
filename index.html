@@ -142,6 +142,14 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
       <h3>Actualizar cada</h3>
       <div class="tabs" id="refTabs"></div>
     </div>
+    <div>
+      <h3>Radio de búsqueda cercana (📍)</h3>
+      <div class="tabs" id="radTabs"></div>
+    </div>
+    <div>
+      <h3>Estaciones cercanas a mostrar</h3>
+      <div class="tabs" id="nnTabs"></div>
+    </div>
     <div class="actions">
       <button id="setCancel">Cancelar</button>
       <button class="pri" id="setOk">Guardar</button>
@@ -177,8 +185,10 @@ const state = {
   proxy: false,
   data: {},   // por id de pantalla
   near: store.get('near',false),
-  pos: null, posT: 0, acc: 0, geoErr: null, coordFail: [], coordTry: {},
-  coords: store.get('coords',{})
+  pos: null, posT: 0, acc: 0, geoErr: null,
+  radius: store.get('radius',500), nearN: store.get('nearN',2),
+  nearStations: [], nearRoutes: {}, nearAt: null, nearT: 0, nearBusy: false, nearErr: null,
+  coords: {}
 };
 
 /* Hora actual de París como "milisegundos de pared" (misma escala que las fechas de Navitia) */
@@ -260,6 +270,7 @@ async function getRoutes(stopId){
   return [...map.values()].sort((a,b)=> rank(a.mode)-rank(b.mode) || String(a.code).localeCompare(String(b.code),undefined,{numeric:true}) || a.dir.localeCompare(b.dir));
 }
 
+const depMemo = new Map();
 async function getDepartures(b){
   if(demoMode() || b.stopId.startsWith('demo:')){
     const now = parisNow();
@@ -270,8 +281,9 @@ async function getDepartures(b){
     // algunas demos a la hora de servicio terminado: no aplica; siempre simulamos servicio
     return out;
   }
-  const lineId = b.lineId;
-  const j = await api('/lines/'+lineId+'/stop_areas/'+b.stopId+'/departures?data_freshness=realtime&count=30&duration=7200');
+  const mk = b.stopId+'|'+b.lineId; let m = depMemo.get(mk);
+  if(!m || Date.now()-m.t > 5000){ m = {t:Date.now(), p: api('/lines/'+b.lineId+'/stop_areas/'+b.stopId+'/departures?data_freshness=realtime&count=40&duration=7200')}; depMemo.set(mk,m); }
+  const j = await m.p;
   const ids = new Set(b.routeIds);
   return (j.departures||[])
     .filter(d => ids.has(d.route && d.route.id))
@@ -316,19 +328,19 @@ function moduleHTML(key, list, opt){
   const fg = '#'+b.text, bg = '#'+b.color;
   const sq = b.mode && b.mode!=='Métro' ? ' sq' : '';
   const rows = list.map(x =>
-    '<div class="drow"><div class="dn"><button class="rm" data-del="'+esc(x.uid)+'" title="Quitar este sentido">✕</button>'+
+    '<div class="drow"><div class="dn">'+(opt.auto?'':'<button class="rm" data-del="'+esc(x.uid)+'" title="Quitar este sentido">✕</button>')+
     '<span class="t">→ '+esc(x.dir)+'</span></div>'+cellsHTML(x, now)+'</div>').join('');
   return '<section class="board'+(opt.near?' near':'')+'" data-key="'+esc(key)+'">'+
     '<div class="top">'+(opt.near?'':'<span class="grip" data-grip title="Arrastra para reordenar"></span>')+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
     '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div></div>'+
     (opt.near && isFinite(opt.dist) ? '<span class="dist">'+fmtDist(opt.dist)+'</span>' : '')+
-    (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
-    '<button class="tb" data-delmod="'+esc(key)+'" title="Quitar módulo">✕</button></div>'+
+    (opt.auto ? '<button class="tb" data-pin="'+esc(key)+'" title="Guardar en Tus estaciones">＋</button>' :
+      (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
+      '<button class="tb" data-delmod="'+esc(key)+'" title="Quitar módulo">✕</button>')+'</div>'+
     '<div class="panel">'+rows+'</div><div class="strip" style="background:'+bg+'"></div></section>';
 }
 /* ===== Cercanía (GPS) ===== */
-const NEAR_N = 2;
 const DEMO_COORDS = {'demo:chatelet':{lat:48.8584,lon:2.3470},'demo:bastille':{lat:48.8530,lon:2.3692},'demo:nation':{lat:48.8483,lon:2.3959},'demo:gare-de-lyon':{lat:48.8443,lon:2.3744},'demo:montparnasse':{lat:48.8421,lon:2.3219},'demo:saint-lazare':{lat:48.8760,lon:2.3248}};
 function distM(a,b){
   const R=6371000, rad=x=>x*Math.PI/180, dLa=rad(b.lat-a.lat), dLo=rad(b.lon-a.lon);
@@ -336,58 +348,72 @@ function distM(a,b){
   return 2*R*Math.asin(Math.sqrt(h));
 }
 function fmtDist(d){ return d<1000 ? (Math.max(10,Math.round(d/10)*10))+' m' : (d/1000).toFixed(1).replace('.',',')+' km'; }
-function splitNear(){
-  const gs = groupsOf();
-  if(!state.near || !state.pos) return {near:[], rest:gs.map(([k,l])=>({k,l}))};
-  const arr = gs.map(([k,l])=>{ const c = state.coords[l[0].stopId]; return {k,l,d: c ? distM(state.pos,c) : Infinity}; });
-  const near = arr.filter(x=>isFinite(x.d)).sort((a,b)=>a.d-b.d).slice(0,NEAR_N);
-  const ids = new Set(near.map(x=>x.k));
-  return {near, rest: arr.filter(x=>!ids.has(x.k))};
+const RAIL = new Set(['Métro','RER','Train','Tramway']);
+
+/* Estaciones a menos de R metros de una posición */
+async function nearbyStations(pos, R){
+  if(demoMode()){
+    return DEMO_STATIONS.map(st=>({id:st.id, name:st.name, ...DEMO_COORDS[st.id]}))
+      .map(st=>({...st, d:distM(pos,st)})).filter(st=>st.d<=R).sort((a,b)=>a.d-b.d);
+  }
+  const q = seg => '/'+seg+'/'+pos.lon+';'+pos.lat+'/places_nearby?type[]=stop_area&distance='+R+'&count=50';
+  let j; try{ j = await api(q('coords')); }catch(e){ j = await api(q('coord')); }
+  return (j.places_nearby || j.places || []).filter(p=>p.embedded_type==='stop_area').map(p=>{
+    const c = p.stop_area && p.stop_area.coord, lat = c?+c.lat:NaN, lon = c?+c.lon:NaN;
+    return {id:p.id, name:p.name, lat, lon, d: isFinite(lat) ? distM(pos,{lat,lon}) : (+p.distance||0)};
+  }).sort((a,b)=>a.d-b.d);
+}
+/* Busca las N estaciones más cercanas (≤R m) que tengan metro, RER, tren o tranvía */
+async function discoverNear(force){
+  if(!state.near || !state.pos || state.nearBusy) return;
+  const pos = state.pos;
+  if(!force && state.nearAt && distM(state.nearAt,pos) < 75 && Date.now()-state.nearT < 180000) return;
+  state.nearBusy = true; state.nearErr = null; updateGeoBar(); render();
+  try{
+    const cands = await nearbyStations(pos, state.radius);
+    const stations = [], routesBy = {};
+    for(let i=0; i<cands.length && stations.length<state.nearN && i<16; i+=4){
+      const batch = cands.slice(i,i+4);
+      const res = await Promise.all(batch.map(c=>getRoutes(c.id).then(r=>r,()=>[])));
+      batch.forEach((c,j)=>{
+        if(stations.length>=state.nearN) return;
+        const rail = res[j].filter(r=>RAIL.has(r.mode));
+        if(!rail.length) return;
+        const name = c.name.replace(/\s*\(.*\)$/,'');
+        routesBy[c.id] = rail.map(r=>mkBoard(c.id,name,r));
+        stations.push({id:c.id, name, lat:c.lat, lon:c.lon, d:c.d});
+      });
+    }
+    state.nearStations = stations; state.nearRoutes = routesBy;
+    state.nearAt = pos; state.nearT = Date.now();
+  }catch(e){ state.nearErr = e.message; }
+  state.nearBusy = false; updateGeoBar(); render(); refreshAll();
+}
+function allBoards(){
+  const m = new Map();
+  for(const b of state.boards) m.set(b.uid,b);
+  if(state.near) for(const id in state.nearRoutes) for(const b of state.nearRoutes[id]) if(!m.has(b.uid)) m.set(b.uid,b);
+  return [...m.values()];
 }
 function layoutHTML(){
-  const {near, rest} = splitNear();
+  const saved = groupsOf(), savedMap = new Map(saved), near = [];
+  if(state.near && state.pos){
+    for(const st of state.nearStations){
+      const d = isFinite(st.lat) ? distM(state.pos,st) : st.d, lines = new Map();
+      for(const b of (state.nearRoutes[st.id]||[])){ const k=b.stopId+'|'+b.lineId; if(!lines.has(k)) lines.set(k,[]); lines.get(k).push(b); }
+      for(const [k,l] of lines) near.push(savedMap.has(k) ? {k, l:savedMap.get(k), d, auto:false} : {k, l, d, auto:true});
+    }
+  }
+  const nearKeys = new Set(near.map(x=>x.k));
+  const rest = saved.filter(([k])=>!nearKeys.has(k)).map(([k,l])=>({k,l}));
   let h = '';
-  if(near.length){
-    h += '<div class="sect">📍 Más cerca de ti</div>'+near.map(x=>moduleHTML(x.k,x.l,{near:true,dist:x.d})).join('');
+  if(state.near && state.pos){
+    h += '<div class="sect">📍 Más cerca de ti · a menos de '+state.radius+' m</div>';
+    if(near.length) h += near.map(x=>moduleHTML(x.k,x.l,{near:true,auto:x.auto,dist:x.d})).join('');
+    else h += '<div class="sect" style="text-transform:none;letter-spacing:0;font-size:13px">'+(state.nearBusy ? 'Buscando estaciones…' : 'No hay estaciones de metro, RER o tren a menos de '+state.radius+' m.')+'</div>';
     if(rest.length) h += '<div class="sect">Tus estaciones</div>';
   }
   return h + rest.map(x=>moduleHTML(x.k,x.l)).join('');
-}
-async function coordFor(b){
-  const id = b.stopId;
-  if(id.startsWith('demo:')) return DEMO_COORDS[id] || null;
-  try{   // 1) búsqueda de PRIM (la misma llamada que usa el buscador de estaciones)
-    const j = await api('/places?q='+encodeURIComponent(b.stopName)+'&type[]=stop_area&count=10');
-    const p = (j.places||[]).find(x=>x.id===id), c = p && p.stop_area && p.stop_area.coord;
-    if(c && isFinite(+c.lat) && isFinite(+c.lon)) return {lat:+c.lat, lon:+c.lon};
-  }catch(e){}
-  try{   // 2) ficha de la estación
-    const j = await api('/stop_areas/'+id), c = j.stop_areas && j.stop_areas[0] && j.stop_areas[0].coord;
-    if(c && isFinite(+c.lat) && isFinite(+c.lon)) return {lat:+c.lat, lon:+c.lon};
-  }catch(e){}
-  return null;
-}
-let ensuring = false;
-async function ensureCoords(){
-  if(ensuring) return; ensuring = true;
-  try{
-    const seen = new Set(), now = Date.now();
-    const miss = state.boards.filter(b=>{
-      if(state.coords[b.stopId] || seen.has(b.stopId)) return false;
-      if(state.coordTry[b.stopId] && now-state.coordTry[b.stopId] < 300000) return false;
-      seen.add(b.stopId); return true;
-    });
-    if(miss.length){
-      state.coordFail = [];
-      await Promise.all(miss.map(async b=>{
-        state.coordTry[b.stopId] = Date.now();
-        const c = await coordFor(b);
-        if(c) state.coords[b.stopId] = c; else state.coordFail.push(b.stopName);
-      }));
-      store.set('coords', state.coords);
-    }
-  } finally { ensuring = false; }
-  render(); updateGeoBar();
 }
 function updateGeoBar(){
   const bar = $('#geoBar'); if(!bar) return;
@@ -395,29 +421,27 @@ function updateGeoBar(){
   if(state.geoErr){ t = state.geoErr; err = true; }
   else if(!state.near){ bar.className = 'geobar hide'; return; }
   else if(!state.pos){ t = '📍 Buscando tu ubicación… Si el navegador te lo pide, acepta el permiso.'; }
-  else {
-    const missing = [...new Set(state.boards.map(b=>b.stopId))].filter(id=>!state.coords[id]).length;
-    if(missing && state.coordFail.length && !ensuring){ t = '📍 No pude obtener la posición de: '+state.coordFail.join(', ')+'.'; err = true; }
-    else if(missing){ t = '📍 Ubicación lista. Cargando la posición de tus estaciones…'; }
-    else t = '📍 Ubicación activa (±'+state.acc+' m)';
-  }
+  else if(state.nearBusy){ t = '📍 Buscando estaciones a menos de '+state.radius+' m…'; }
+  else if(state.nearErr){ t = '📍 No pude buscar estaciones cercanas: '+state.nearErr; err = true; }
+  else if(!state.nearStations.length){ t = '📍 No hay estaciones de metro, RER o tren a menos de '+state.radius+' m. Prueba con un radio mayor en ⚙ Ajustes.'; }
+  else t = '📍 '+state.nearStations.length+' estación(es) a menos de '+state.radius+' m (ubicación ±'+state.acc+' m)';
   bar.textContent = t; bar.className = 'geobar'+(err?' err':'');
 }
 let geoId = null;
 function stopGeo(){
   if(geoId!==null && navigator.geolocation){ navigator.geolocation.clearWatch(geoId); }
-  geoId = null; state.pos = null;
+  geoId = null; state.pos = null; state.nearAt = null;
 }
 function startGeo(){
   state.geoErr = null;
   if(!navigator.geolocation){ state.geoErr = '📍 Este navegador no permite la ubicación.'; state.near = false; store.set('near',false); syncNearBtn(); updateGeoBar(); return; }
   if(geoId!==null) return;
-  updateGeoBar(); ensureCoords();
+  updateGeoBar();
   const ok = pos=>{
     state.geoErr = null; state.acc = Math.round(pos.coords.accuracy);
     const n = {lat:pos.coords.latitude, lon:pos.coords.longitude};
     if(!state.pos || distM(state.pos,n)>15 || Date.now()-state.posT>20000){ state.pos = n; state.posT = Date.now(); render(); }
-    updateGeoBar();
+    updateGeoBar(); discoverNear();
   };
   const bad = err=>{
     if(err.code===1){
@@ -428,22 +452,19 @@ function startGeo(){
     updateGeoBar();
   };
   // Baja precisión (red/WiFi): más rápida y suficiente para estaciones; funciona también en interiores
-  const opts = {enableHighAccuracy:false, maximumAge:30000, timeout:20000};
-  navigator.geolocation.getCurrentPosition(ok, bad, opts);
+  navigator.geolocation.getCurrentPosition(ok, bad, {enableHighAccuracy:false, maximumAge:30000, timeout:20000});
   geoId = navigator.geolocation.watchPosition(ok, bad, {enableHighAccuracy:false, maximumAge:30000, timeout:60000});
 }
 function syncNearBtn(){ $('#btnNear').classList.toggle('on', !!state.near); }
 function render(){
   if(state.dragging) return;
   const el = $('#boards');
-  if(!state.boards.length){
+  const html = layoutHTML();
+  if(!html){
     el.__sig = null;
     el.innerHTML ='<div class="empty"><div style="font-size:42px">🚇</div><p>Aún no hay pantallas.</p><button class="pri" id="emptyAdd">＋ Añadir estación</button></div>';
     const eb = $('#emptyAdd'); if(eb) eb.onclick = openAdd;
-  } else {
-    const html = layoutHTML();
-    if(el.__sig !== html){ el.innerHTML = html; el.__sig = html; }
-  }
+  } else if(el.__sig !== html){ el.innerHTML = html; el.__sig = html; }
   $('#mode').innerHTML = demoMode() ? '<span class="demo">● MODO DEMO — datos simulados. Añade tu clave API en ⚙ Ajustes.</span>' : '';
 }
 function tickClock(){
@@ -454,12 +475,12 @@ function tickClock(){
 /* ===== Actualización ===== */
 let lastOk = null;
 async function refreshAll(){
-  if(!state.boards.length) return;
-  if(state.near) ensureCoords();
+  const boards = allBoards();
+  if(!boards.length) return;
   let errs = 0;
   // agrupa peticiones iguales (misma estación+línea) para no gastar cuota
   const cache = new Map();
-  await Promise.all(state.boards.map(async b=>{
+  await Promise.all(boards.map(async b=>{
     const k = b.stopId+'|'+b.lineId+'|'+b.routeIds.join(',');
     try{
       if(!cache.has(k)) cache.set(k, getDepartures(b));
@@ -537,7 +558,6 @@ $('#addOk').onclick = ()=>{
     if(state.boards.some(b=>b.uid===nb.uid)) continue;
     state.boards.push(nb);
   }
-  if(curStop.lat!=null && isFinite(curStop.lat) && isFinite(curStop.lon)){ state.coords[curStop.id] = {lat:curStop.lat, lon:curStop.lon}; store.set('coords', state.coords); }
   store.set('boards', state.boards);
   $('#dlgAdd').close(); render(); refreshAll();
 };
@@ -571,16 +591,22 @@ $('#addCancel').onclick = ()=>$('#dlgAdd').close();
 function chips(el, opts, cur, fmtFn){ el.innerHTML = opts.map(o=>'<span class="chip'+(o===cur?' on':'')+'" data-v="'+o+'">'+fmtFn(o)+'</span>').join(''); }
 let tmp = {};
 function openSet(){
-  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh};
+  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh, radius:state.radius, nearN:state.nearN};
   chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s');
+  chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v);
   $('#dlgSet').showModal();
 }
 $('#cntTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.count=+c.dataset.v; chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); };
 $('#refTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.refresh=+c.dataset.v; chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s'); };
+$('#radTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.radius=+c.dataset.v; chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); };
+$('#nnTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.nearN=+c.dataset.v; chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); };
 $('#setOk').onclick = ()=>{
   state.key = $('#apikey').value.trim(); state.count = tmp.count; state.refresh = tmp.refresh;
   store.set('key',state.key); store.set('count',state.count); store.set('refresh',state.refresh);
+  const geoChanged = state.radius!==tmp.radius || state.nearN!==tmp.nearN;
+  state.radius = tmp.radius; state.nearN = tmp.nearN; store.set('radius',state.radius); store.set('nearN',state.nearN);
   $('#dlgSet').close(); state.data={}; schedule(); render(); refreshAll();
+  if(geoChanged){ state.nearAt=null; state.nearStations=[]; state.nearRoutes={}; updateGeoBar(); discoverNear(true); }
 };
 $('#setCancel').onclick = ()=>$('#dlgSet').close();
 
@@ -596,7 +622,14 @@ $('#boards').addEventListener('click', e=>{
   const m = e.target.closest('[data-delmod]');
   if(m){ state.boards = state.boards.filter(b=>(b.stopId+'|'+b.lineId)!==m.dataset.delmod); store.set('boards',state.boards); render(); return; }
   const o = e.target.closest('[data-both]');
-  if(o) addOtherDirection(o.dataset.both);
+  if(o){ addOtherDirection(o.dataset.both); return; }
+  const pn = e.target.closest('[data-pin]');
+  if(pn){
+    const [sid,lid] = pn.dataset.pin.split('|');
+    for(const id in state.nearRoutes) for(const b of state.nearRoutes[id])
+      if(b.stopId===sid && b.lineId===lid && !state.boards.some(x=>x.uid===b.uid)) state.boards.push({...b});
+    store.set('boards', state.boards); render(); refreshAll();
+  }
 });
 /* ===== Reordenar módulos arrastrando el asa ===== */
 let drag = null;
