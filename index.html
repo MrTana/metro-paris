@@ -49,6 +49,10 @@ sup{font-size:.62em;line-height:0}
 .cell.dim .big{color:#8a6a1e;text-shadow:none}
 .cell .sub{height:9px;font-size:8px;line-height:9px;color:#8a93a3;letter-spacing:.3px}
 .strip{height:7px}
+.sect{grid-column:1/-1;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut);margin:2px 2px -4px}
+button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.board.near{box-shadow:0 5px 18px rgba(0,0,0,.55),0 0 0 2px #4a6cf7}
+.top .dist{flex:none;font-size:12px;font-weight:700;color:#3b4aa0;background:#e3e7fb;border-radius:999px;padding:2px 8px;white-space:nowrap}
 .grip{flex:none;box-sizing:content-box;width:14px;height:22px;padding:0 5px;margin-left:-5px;background:radial-gradient(circle,#1d1d2b 1.5px,transparent 1.7px) 0 0/7px 7px;background-clip:content-box;opacity:.4;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .grip:hover{opacity:.85}
 .board.ph{opacity:.25}
@@ -77,14 +81,15 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
 .chip.on{background:var(--acc);border-color:var(--acc)}
 .actions{display:flex;gap:8px;justify-content:flex-end}
 .hide{display:none!important}
-@media (max-width:520px){main{grid-template-columns:1fr;padding:12px}header{padding:8px 12px;gap:8px}header h1{display:none}#clock{flex:1;font-size:24px}.cell{min-width:52px}.dn{font-size:13px}}
+@media (max-width:520px){main{grid-template-columns:1fr;padding:12px}header{padding:8px 12px;gap:8px}header h1{display:none}.lbl{display:none}#clock{flex:1;font-size:24px}.cell{min-width:52px}.dn{font-size:13px}}
 </style>
 </head>
 <body>
 <header>
   <h1>🚇 METRO PARÍS · TIEMPO REAL</h1>
   <div id="clock">--:--:--</div>
-  <button class="ico" id="btnAdd" title="Añadir pantalla">＋ Añadir</button>
+  <button class="ico" id="btnNear" title="Mostrar primero las estaciones más cercanas a ti">📍</button>
+  <button class="ico" id="btnAdd" title="Añadir pantalla">＋<span class="lbl"> Añadir</span></button>
   <button class="ico" id="btnSet" title="Ajustes">⚙</button>
   <button class="ico" id="btnFs" title="Pantalla completa">⛶</button>
 </header>
@@ -92,6 +97,7 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
 <footer>
   <span id="status">Cargando…</span>
   <span>Las cifras son minutos · atenuado = horario teórico</span>
+  <span id="geo"></span>
   <span id="mode"></span>
 </footer>
 
@@ -167,7 +173,10 @@ const state = {
   refresh: store.get('refresh',30),
   base: DIRECT_BASE,
   proxy: false,
-  data: {}   // por id de pantalla
+  data: {},   // por id de pantalla
+  near: store.get('near',false),
+  pos: null, posT: 0,
+  coords: store.get('coords',{})
 };
 
 /* Hora actual de París como "milisegundos de pared" (misma escala que las fechas de Navitia) */
@@ -299,21 +308,83 @@ function cellsHTML(b, now){
   }
   return c+'</div>';
 }
-function moduleHTML(key, list){
+function moduleHTML(key, list, opt){
+  opt = opt || {};
   const b = list[0], now = parisNow();
   const fg = '#'+b.text, bg = '#'+b.color;
   const sq = b.mode && b.mode!=='Métro' ? ' sq' : '';
   const rows = list.map(x =>
     '<div class="drow"><div class="dn"><button class="rm" data-del="'+esc(x.uid)+'" title="Quitar este sentido">✕</button>'+
     '<span class="t">→ '+esc(x.dir)+'</span></div>'+cellsHTML(x, now)+'</div>').join('');
-  return '<section class="board" data-key="'+esc(key)+'">'+
-    '<div class="top"><span class="grip" data-grip title="Arrastra para reordenar"></span>'+pictHTML(b)+
+  return '<section class="board'+(opt.near?' near':'')+'" data-key="'+esc(key)+'">'+
+    '<div class="top">'+(opt.near?'':'<span class="grip" data-grip title="Arrastra para reordenar"></span>')+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
     '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div></div>'+
+    (opt.near && isFinite(opt.dist) ? '<span class="dist">'+fmtDist(opt.dist)+'</span>' : '')+
     (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
     '<button class="tb" data-delmod="'+esc(key)+'" title="Quitar módulo">✕</button></div>'+
     '<div class="panel">'+rows+'</div><div class="strip" style="background:'+bg+'"></div></section>';
 }
+/* ===== Cercanía (GPS) ===== */
+const NEAR_N = 2;
+const DEMO_COORDS = {'demo:chatelet':{lat:48.8584,lon:2.3470},'demo:bastille':{lat:48.8530,lon:2.3692},'demo:nation':{lat:48.8483,lon:2.3959},'demo:gare-de-lyon':{lat:48.8443,lon:2.3744},'demo:montparnasse':{lat:48.8421,lon:2.3219},'demo:saint-lazare':{lat:48.8760,lon:2.3248}};
+function distM(a,b){
+  const R=6371000, rad=x=>x*Math.PI/180, dLa=rad(b.lat-a.lat), dLo=rad(b.lon-a.lon);
+  const h=Math.sin(dLa/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function fmtDist(d){ return d<1000 ? (Math.max(10,Math.round(d/10)*10))+' m' : (d/1000).toFixed(1).replace('.',',')+' km'; }
+function splitNear(){
+  const gs = groupsOf();
+  if(!state.near || !state.pos) return {near:[], rest:gs.map(([k,l])=>({k,l}))};
+  const arr = gs.map(([k,l])=>{ const c = state.coords[l[0].stopId]; return {k,l,d: c ? distM(state.pos,c) : Infinity}; });
+  const near = arr.filter(x=>isFinite(x.d)).sort((a,b)=>a.d-b.d).slice(0,NEAR_N);
+  const ids = new Set(near.map(x=>x.k));
+  return {near, rest: arr.filter(x=>!ids.has(x.k))};
+}
+function layoutHTML(){
+  const {near, rest} = splitNear();
+  let h = '';
+  if(near.length){
+    h += '<div class="sect">📍 Más cerca de ti</div>'+near.map(x=>moduleHTML(x.k,x.l,{near:true,dist:x.d})).join('');
+    if(rest.length) h += '<div class="sect">Tus estaciones</div>';
+  }
+  return h + rest.map(x=>moduleHTML(x.k,x.l)).join('');
+}
+async function ensureCoords(){
+  const miss = [...new Set(state.boards.map(b=>b.stopId))].filter(id=>!state.coords[id]);
+  if(!miss.length) return;
+  await Promise.all(miss.map(async id=>{
+    try{
+      if(id.startsWith('demo:')){ if(DEMO_COORDS[id]) state.coords[id]=DEMO_COORDS[id]; return; }
+      const j = await api('/stop_areas/'+id);
+      const c = j.stop_areas && j.stop_areas[0] && j.stop_areas[0].coord;
+      if(c) state.coords[id] = {lat:+c.lat, lon:+c.lon};
+    }catch(e){}
+  }));
+  store.set('coords', state.coords); render();
+}
+let geoId = null;
+function setGeo(t){ const e=$('#geo'); if(e) e.textContent = t; }
+function stopGeo(){
+  if(geoId!==null && navigator.geolocation){ navigator.geolocation.clearWatch(geoId); }
+  geoId = null; state.pos = null; setGeo('');
+}
+function startGeo(){
+  if(!navigator.geolocation){ setGeo('📍 Este navegador no permite la ubicación.'); state.near=false; store.set('near',false); syncNearBtn(); return; }
+  if(geoId!==null) return;
+  setGeo('📍 Buscando tu ubicación…'); ensureCoords();
+  geoId = navigator.geolocation.watchPosition(pos=>{
+    const n = {lat:pos.coords.latitude, lon:pos.coords.longitude};
+    setGeo('📍 Ubicación activa (±'+Math.round(pos.coords.accuracy)+' m)');
+    if(!state.pos || distM(state.pos,n)>15 || Date.now()-state.posT>20000){ state.pos=n; state.posT=Date.now(); render(); }
+  }, err=>{
+    if(err.code===1){ stopGeo(); state.near=false; store.set('near',false); syncNearBtn(); render(); setGeo('📍 Permiso de ubicación denegado. Actívalo en los ajustes del sitio del navegador.'); }
+    else if(err.code===2){ setGeo('📍 No se pudo obtener la ubicación.'); }
+    else { setGeo('📍 Tardando en obtener la ubicación…'); }
+  }, {enableHighAccuracy:true, maximumAge:15000, timeout:30000});
+}
+function syncNearBtn(){ $('#btnNear').classList.toggle('on', !!state.near); }
 function render(){
   if(state.dragging) return;
   const el = $('#boards');
@@ -322,7 +393,7 @@ function render(){
     el.innerHTML ='<div class="empty"><div style="font-size:42px">🚇</div><p>Aún no hay pantallas.</p><button class="pri" id="emptyAdd">＋ Añadir estación</button></div>';
     const eb = $('#emptyAdd'); if(eb) eb.onclick = openAdd;
   } else {
-    const html = groupsOf().map(([k,l])=>moduleHTML(k,l)).join('');
+    const html = layoutHTML();
     if(el.__sig !== html){ el.innerHTML = html; el.__sig = html; }
   }
   $('#mode').innerHTML = demoMode() ? '<span class="demo">● MODO DEMO — datos simulados. Añade tu clave API en ⚙ Ajustes.</span>' : '';
@@ -336,6 +407,7 @@ function tickClock(){
 let lastOk = null;
 async function refreshAll(){
   if(!state.boards.length) return;
+  if(state.near) ensureCoords();
   let errs = 0;
   // agrupa peticiones iguales (misma estación+línea) para no gastar cuota
   const cache = new Map();
@@ -464,6 +536,10 @@ $('#setOk').onclick = ()=>{
 $('#setCancel').onclick = ()=>$('#dlgSet').close();
 
 /* ===== Eventos globales ===== */
+$('#btnNear').onclick = ()=>{
+  state.near = !state.near; store.set('near', state.near); syncNearBtn();
+  if(state.near) startGeo(); else { stopGeo(); render(); }
+};
 $('#btnAdd').onclick = openAdd; $('#btnSet').onclick = openSet;
 $('#boards').addEventListener('click', e=>{
   const x = e.target.closest('[data-del]');
@@ -502,7 +578,7 @@ function dragTick(){
   else if(y > vh-edge) window.scrollBy(0, Math.ceil((y-(vh-edge))/6));
   const el = document.elementFromPoint(x,y);
   const t = el && el.closest ? el.closest('.board') : null;
-  if(t && t!==drag.sec && t.parentNode===main && performance.now()-drag.last > 120){
+  if(t && t!==drag.sec && !t.classList.contains('near') && t.parentNode===main && performance.now()-drag.last > 120){
     const kids = [...main.children], si = kids.indexOf(drag.sec), ti = kids.indexOf(t);
     const cols = getComputedStyle(main).gridTemplateColumns.split(' ').length;
     let go = true;
@@ -515,7 +591,10 @@ function endDrag(e){
   if(!drag || (e && e.pointerId!==drag.pid)) return;
   cancelAnimationFrame(drag.raf);
   drag.clone.remove(); drag.sec.classList.remove('ph'); document.body.classList.remove('dragging');
-  const pos = new Map([...$('#boards').children].map((c,i)=>[c.dataset.key,i]));
+  const restKeys = [...$('#boards').children].filter(c=>c.classList.contains('board') && !c.classList.contains('near')).map(c=>c.dataset.key);
+  const restSet = new Set(restKeys), q = [...restKeys];
+  const order = groupsOf().map(g=>g[0]).map(k => restSet.has(k) ? q.shift() : k);
+  const pos = new Map(order.map((k,i)=>[k,i]));
   const gk = b => b.stopId+'|'+b.lineId;
   state.boards = state.boards.map((b,i)=>({b,i})).sort((a,c)=> (pos.get(gk(a.b))-pos.get(gk(c.b))) || (a.i-c.i)).map(o=>o.b);
   store.set('boards', state.boards);
@@ -539,7 +618,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
     if(r.ok){ const j = await r.json(); if(j && j.ok){ state.base='/api'; state.proxy=true; } }
   }catch(e){}
   tickClock(); setInterval(()=>{ tickClock(); if(state.boards.length) render(); }, 1000);
-  render(); schedule(); keepAwake(); refreshAll();
+  render(); schedule(); keepAwake(); syncNearBtn(); if(state.near) startGeo(); refreshAll();
   if(!state.boards.length && !state.key) { /* primera vez: abre ajustes tras un instante */ }
 })();
 </script>
