@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metro París en vivo</title>
+<meta name="theme-color" content="#06080d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Metro París">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
 <style>
@@ -101,6 +108,7 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
 <footer>
   <span id="status">Cargando…</span>
   <span>Las cifras son minutos · atenuado = horario teórico</span>
+  <button class="hide" id="installBtn" style="padding:2px 10px;font-size:12px">📲 Instalar app</button>
   <span id="usage"></span>
   <span id="mode"></span>
 </footer>
@@ -810,6 +818,20 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
   render(); schedule(); keepAwake(); syncNearBtn(); updateGeoBar(); if(state.near) startGeo(); refreshAll();
   if(!state.boards.length && !state.key) { /* primera vez: abre ajustes tras un instante */ }
 })();
+
+/* ===== PWA: instalación y service worker ===== */
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredInstall = e; $('#installBtn').classList.remove('hide'); });
+$('#installBtn').onclick = async()=>{
+  if(!deferredInstall) return;
+  deferredInstall.prompt();
+  try{ await deferredInstall.userChoice; }catch(_){}
+  deferredInstall = null; $('#installBtn').classList.add('hide');
+};
+window.addEventListener('appinstalled', ()=>$('#installBtn').classList.add('hide'));
+if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
 </script>
 </body>
 </html>
