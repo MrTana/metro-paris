@@ -31,7 +31,7 @@ main{flex:1;padding:16px;display:grid;gap:14px;grid-template-columns:repeat(auto
 .badge.sq{border-radius:8px}
 .top .nm{min-width:0;flex:1}
 .top .dir{font-size:clamp(20px,5.2vw,30px);font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.top .st{font-size:11px;color:#6a6f7c;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.top .st{font-size:13px;color:#555b69;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .top .x{flex:none;background:transparent;border:none;color:#1d1d2b;opacity:.35;padding:4px 6px;font-size:16px;border-radius:6px}
 .top .x:hover{opacity:1;background:rgba(0,0,0,.08)}
 .panel{display:grid;min-height:112px;background:radial-gradient(120% 140% at 30% 10%,#1b2420 0%,#0a0d0c 55%,#000 100%)}
@@ -289,7 +289,7 @@ function boardHTML(b){
   return '<section class="board" data-uid="'+b.uid+'">'+
     '<div class="top">'+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
-    '<div class="nm"><div class="dir">'+esc(b.dir)+'</div><div class="st">'+esc(b.stopName)+'</div></div>'+
+    '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div><div class="st">→ '+esc(b.dir)+'</div></div>'+
     '<button class="x" data-del="'+b.uid+'" title="Quitar">✕</button></div>'+
     body+'<div class="strip" style="background:'+bg+'"></div></section>';
 }
