@@ -58,7 +58,6 @@ sup{font-size:.62em;line-height:0}
 .strip{height:7px}
 .geobar{padding:6px 18px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line)}
 .geobar.err{color:var(--err)}
-.top .dist.out{color:#8a5a00;background:#fff0cf}
 .sect.sub{font-size:11px;margin-top:6px}
 .sect .lnk{background:none;border:none;color:#8fa4ff;padding:0;font:inherit;cursor:pointer;text-decoration:underline}
 .sect{grid-column:1/-1;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut);margin:2px 2px -4px}
@@ -163,11 +162,6 @@ input[type=text],input[type=password]{width:100%;background:var(--bg);border:1px
       <div class="tabs" id="nnTabs"></div>
     </div>
     <div>
-      <h3>Si hay pocas en el radio, completar con las más cercanas</h3>
-      <div class="tabs" id="fillTabs"></div>
-      <div class="hint" style="margin-top:6px">Si dentro del radio hay 0 o menos estaciones de las que quieres mostrar, se añaden las más cercanas fuera de él (marcadas en naranja) hasta completar.</div>
-    </div>
-    <div>
       <h3>Paradas de bus de apoyo</h3>
       <div class="tabs" id="busTabs"></div>
       <div class="hint" style="margin-top:6px">Si dentro del radio hay 0 o 1 estación de tren, se añaden las paradas de bus más cercanas (las que elijas aquí) para poder guardarlas u ocultarlas.</div>
@@ -213,7 +207,7 @@ const state = {
   data: {},   // por id de pantalla
   near: store.get('near',false),
   pos: null, posT: 0, acc: 0, geoErr: null,
-  radius: store.get('radius',500), nearN: store.get('nearN',2), fill: store.get('fill',true), busN: store.get('busN',2),
+  radius: store.get('radius',500), nearN: store.get('nearN',2), busN: store.get('busN',2),
   limit: store.get('limit',20000), hidden: store.get('hidden',[]), usage: 0, rlUntil: 0, rlCount: 0, lastCalls: 0, nearRetry: null,
   nearStations: [], nearRoutes: {}, nearAt: null, nearT: 0, nearBusy: false, nearErr: null,
   coords: {}
@@ -413,7 +407,7 @@ function moduleHTML(key, list, opt){
     '<div class="top">'+(opt.near?'':'<span class="grip" data-grip title="Arrastra para reordenar"></span>')+pictHTML(b)+
     '<div class="badge'+sq+'" style="background:'+bg+';color:'+fg+'">'+esc(b.code)+'</div>'+
     '<div class="nm"><div class="dir">'+esc(b.stopName)+'</div></div>'+
-    (opt.near && isFinite(opt.dist) ? '<span class="dist'+(opt.out?' out':'')+'">'+fmtDist(opt.dist)+'</span>' : '')+
+    (opt.near && isFinite(opt.dist) ? '<span class="dist">'+fmtDist(opt.dist)+'</span>' : '')+
     (opt.auto ? '<button class="tb" data-pin="'+esc(key)+'" title="Guardar en Tus estaciones">＋</button><button class="tb" data-hidemod="'+esc(key)+'" title="Ocultar esta línea">✕</button>' :
       (list.length<2 ? '<button class="tb" data-both="'+esc(key)+'" title="Añadir el otro sentido">⇄</button>' : '')+
       '<button class="tb" data-delmod="'+esc(key)+'" title="Quitar módulo">✕</button>')+'</div>'+
@@ -430,16 +424,15 @@ function fmtDist(d){ return d<1000 ? (Math.max(10,Math.round(d/10)*10))+' m' : (
 const RAIL = new Set(['Métro','RER','Train','Tramway']);
 const BUSRE = /bus|noctilien/i;
 
-/* Estaciones cercanas a una posición (hasta ~2,5 km, de la más próxima a la más lejana) */
+/* Estaciones a menos de R metros de una posición, de la más próxima a la más lejana */
 async function nearbyStations(pos, R){
   if(demoMode()){
     return DEMO_STATIONS.map(st=>({id:st.id, name:st.name, modes:null, ...DEMO_COORDS[st.id]}))
       .map(st=>({...st, d:distM(pos,st)})).sort((a,b)=>a.d-b.d);
   }
-  const BIG = Math.max(2500, R*3);
-  const ck = pos.lat.toFixed(3)+','+pos.lon.toFixed(3)+',big'+BIG, nc = store.get('nearCache',{}), hit = nc[ck];
+  const ck = pos.lat.toFixed(3)+','+pos.lon.toFixed(3)+',r'+R+'m', nc = store.get('nearCache',{}), hit = nc[ck];
   if(hit && Date.now()-hit.t < 6*3600*1000) return hit.list;
-  const q = seg => '/'+seg+'/'+pos.lon+';'+pos.lat+'/places_nearby?type[]=stop_area&distance='+BIG+'&count=100';
+  const q = seg => '/'+seg+'/'+pos.lon+';'+pos.lat+'/places_nearby?type[]=stop_area&distance='+R+'&count=100';
   let j; try{ j = await api(q('coords')); }catch(e){ if(e.status===429||e.status===401||e.status===403||e.status===0) throw e; j = await api(q('coord')); }
   const list = (j.places_nearby || j.places || []).filter(p=>p.embedded_type==='stop_area').map(p=>{
     const sa = p.stop_area || {}, c = sa.coord, lat = c?+c.lat:NaN, lon = c?+c.lon:NaN;
@@ -451,8 +444,8 @@ async function nearbyStations(pos, R){
   store.set('nearCache', nc);
   return list;
 }
-/* Busca las N estaciones con metro, RER, tren o tranvía más cercanas.
-   Primero las que están dentro del radio; si faltan, completa con las más próximas fuera de él. */
+/* Busca las N estaciones con metro, RER, tren o tranvía a menos de R metros.
+   Si hay 0 o 1, añade además las paradas de bus más cercanas (dentro del radio). */
 async function discoverNear(force){
   if(!state.near || !state.pos || state.nearBusy) return;
   const pos = state.pos;
@@ -462,10 +455,9 @@ async function discoverNear(force){
     const cands = (await nearbyStations(pos, state.radius))
       .map(c=>({...c, d: isFinite(c.lat) ? distM(pos,c) : c.d})).sort((a,b)=>a.d-b.d);
     const inside = cands.filter(c=>c.d<=state.radius);
-    const outside = state.fill ? cands.filter(c=>c.d>state.radius) : [];
     const stations = [], routesBy = {}, busFound = [], N = state.nearN;
     const nm = c => c.name.replace(/\s*\(.*\)$/,'');
-    async function take(list, out){
+    async function take(list){
       let i = 0, tried = 0;
       while(i<list.length && stations.length<N && tried<12){
         const batch = [];
@@ -480,15 +472,15 @@ async function discoverNear(force){
           const rail = res[j].filter(r=>RAIL.has(r.mode));
           if(!rail.length){
             const bus = res[j].filter(r=>BUSRE.test(r.mode));
-            if(!out && bus.length) busFound.push({c, bus});          // parada de bus sin modo conocido
+            if(bus.length) busFound.push({c, bus});          // parada de bus sin modo conocido
             return;
           }
           routesBy[c.id] = rail.map(r=>mkBoard(c.id,nm(c),r));
-          stations.push({id:c.id, name:nm(c), lat:c.lat, lon:c.lon, d:c.d, out, kind:'rail'});
+          stations.push({id:c.id, name:nm(c), lat:c.lat, lon:c.lon, d:c.d, kind:'rail'});
         });
       }
     }
-    await take(inside, false);
+    await take(inside);
     // Con 0 o 1 estación de tren dentro del radio: añadir las paradas de bus más cercanas (dentro del radio)
     const busSt = [];
     if(state.busN>0 && stations.length<2){
@@ -496,7 +488,7 @@ async function discoverNear(force){
       const addBus = (c,bus)=>{
         if(busSt.length>=want || busSt.some(x=>x.id===c.id)) return;
         routesBy[c.id] = bus.map(r=>mkBoard(c.id,nm(c),r));
-        busSt.push({id:c.id, name:nm(c), lat:c.lat, lon:c.lon, d:c.d, out:false, kind:'bus'});
+        busSt.push({id:c.id, name:nm(c), lat:c.lat, lon:c.lon, d:c.d, kind:'bus'});
       };
       const known = inside.filter(c=>c.modes && !c.modes.some(m=>RAIL.has(m)) && c.modes.some(m=>BUSRE.test(m)));
       const have = new Set(busFound.map(f=>f.c.id));
@@ -511,8 +503,7 @@ async function discoverNear(force){
       }
       busSt.sort((x,y)=>x.d-y.d);
     }
-    if(stations.length<N) await take(outside, true);
-    state.nearStations = [...stations.filter(x=>!x.out), ...busSt, ...stations.filter(x=>x.out)];
+    state.nearStations = [...stations, ...busSt];
     state.nearRoutes = routesBy;
     state.nearAt = pos; state.nearT = Date.now();
   }catch(e){
@@ -535,8 +526,8 @@ function layoutHTML(){
       const d = isFinite(st.lat) ? distM(state.pos,st) : st.d, lines = new Map();
       for(const b of (state.nearRoutes[st.id]||[])){ const k=b.stopId+'|'+b.lineId; if(!lines.has(k)) lines.set(k,[]); lines.get(k).push(b); }
       for(const [k,l] of lines){
-        if(savedMap.has(k)) near.push({k, l:savedMap.get(k), d, auto:false, out:!!st.out, kind:st.kind});
-        else { const vis = l.filter(b=>!hid.has(b.uid)); if(vis.length) near.push({k, l:vis, d, auto:true, out:!!st.out, kind:st.kind}); }
+        if(savedMap.has(k)) near.push({k, l:savedMap.get(k), d, auto:false, kind:st.kind});
+        else { const vis = l.filter(b=>!hid.has(b.uid)); if(vis.length) near.push({k, l:vis, d, auto:true, kind:st.kind}); }
       }
     }
   }
@@ -547,11 +538,10 @@ function layoutHTML(){
   if(state.near && state.pos){
     h += '<div class="sect">📍 Más cerca de ti · a menos de '+state.radius+' m</div>';
     if(!near.length) h += '<div class="sect" style="'+small+'">'+(state.nearBusy ? 'Buscando estaciones…' : (state.busN>0 ? 'No hay estaciones de tren ni paradas de bus a menos de ' : 'No hay estaciones de metro, RER o tren a menos de ')+state.radius+' m.')+'</div>';
-    let outHeader = false, busHeader = false;
+    let busHeader = false;
     for(const x of near){
       if(x.kind==='bus' && !busHeader){ busHeader = true; h += '<div class="sect sub">🚌 Paradas de bus cercanas (hay pocas estaciones de tren)</div>'; }
-      if(x.out && !outHeader){ outHeader = true; h += '<div class="sect">Las más cercanas, fuera de los '+state.radius+' m</div>'; }
-      h += moduleHTML(x.k,x.l,{near:true,auto:x.auto,out:x.out,dist:x.d});
+      h += moduleHTML(x.k,x.l,{near:true,auto:x.auto,dist:x.d});
     }
     let hn = 0;
     for(const id in state.nearRoutes) for(const b of state.nearRoutes[id]) if(hid.has(b.uid) && !savedMap.has(b.stopId+'|'+b.lineId)) hn++;
@@ -568,10 +558,10 @@ function updateGeoBar(){
   else if(!state.pos){ t = '📍 Buscando tu ubicación… Si el navegador te lo pide, acepta el permiso.'; }
   else if(state.nearBusy){ t = '📍 Buscando estaciones cercanas…'; }
   else if(state.nearErr){ t = '📍 No pude buscar estaciones cercanas: '+state.nearErr; err = true; }
-  else if(!state.nearStations.length){ t = '📍 No encontré estaciones de metro, RER o tren cerca de ti'+(state.fill?'.':' a menos de '+state.radius+' m. Activa «Completar con las más cercanas» o sube el radio en ⚙ Ajustes.'); }
+  else if(!state.nearStations.length){ t = '📍 No hay estaciones de tren'+(state.busN>0?' ni paradas de bus':'')+' a menos de '+state.radius+' m. Prueba con un radio mayor en ⚙ Ajustes.'; }
   else {
-    const ins = state.nearStations.filter(x=>!x.out && x.kind!=='bus').length, outs = state.nearStations.filter(x=>x.out).length, buses = state.nearStations.filter(x=>x.kind==='bus').length;
-    t = '📍 '+(ins ? ins+' estación(es) a menos de '+state.radius+' m' : 'Ninguna estación de tren a menos de '+state.radius+' m')+(buses ? ' + '+buses+' parada(s) de bus' : '')+(outs ? ' + '+outs+' más cercana(s) fuera del radio' : '')+' (ubicación ±'+state.acc+' m)';
+    const buses = state.nearStations.filter(x=>x.kind==='bus').length, ins = state.nearStations.length-buses;
+    t = '📍 '+(ins ? ins+' estación(es) a menos de '+state.radius+' m' : 'Ninguna estación de tren a menos de '+state.radius+' m')+(buses ? ' + '+buses+' parada(s) de bus' : '')+' (ubicación ±'+state.acc+' m)';
   }
   bar.textContent = t; bar.className = 'geobar'+(err?' err':'');
 }
@@ -757,23 +747,22 @@ $('#addCancel').onclick = ()=>$('#dlgAdd').close();
 function chips(el, opts, cur, fmtFn){ el.innerHTML = opts.map(o=>'<span class="chip'+(o===cur?' on':'')+'" data-v="'+o+'">'+fmtFn(o)+'</span>').join(''); }
 let tmp = {};
 function openSet(){
-  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh, radius:state.radius, nearN:state.nearN, limit:state.limit, fill:state.fill?1:0, busN:state.busN};
+  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh, radius:state.radius, nearN:state.nearN, limit:state.limit, busN:state.busN};
   chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s');
-  chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES')); chips($('#fillTabs'),[1,0],tmp.fill,v=>v?'Sí':'No'); chips($('#busTabs'),[0,2,3],tmp.busN,v=>v?String(v):'No');
+  chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES')); chips($('#busTabs'),[0,2,3],tmp.busN,v=>v?String(v):'No');
   $('#dlgSet').showModal();
 }
 $('#cntTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.count=+c.dataset.v; chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); };
 $('#refTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.refresh=+c.dataset.v; chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s'); };
 $('#radTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.radius=+c.dataset.v; chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); };
 $('#nnTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.nearN=+c.dataset.v; chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); };
-$('#fillTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.fill=+c.dataset.v; chips($('#fillTabs'),[1,0],tmp.fill,v=>v?'Sí':'No'); };
 $('#busTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.busN=+c.dataset.v; chips($('#busTabs'),[0,2,3],tmp.busN,v=>v?String(v):'No'); };
 $('#limTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.limit=+c.dataset.v; chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES')); };
 $('#setOk').onclick = ()=>{
   state.key = $('#apikey').value.trim(); state.count = tmp.count; state.refresh = tmp.refresh;
   store.set('key',state.key); store.set('count',state.count); store.set('refresh',state.refresh);
-  const geoChanged = state.radius!==tmp.radius || state.nearN!==tmp.nearN || state.fill!==!!tmp.fill || state.busN!==tmp.busN;
-  state.fill = !!tmp.fill; store.set('fill',state.fill); state.busN = tmp.busN; store.set('busN',state.busN);
+  const geoChanged = state.radius!==tmp.radius || state.nearN!==tmp.nearN || state.busN!==tmp.busN;
+  state.busN = tmp.busN; store.set('busN',state.busN);
   state.limit = tmp.limit; store.set('limit',state.limit); showUsage();
   state.radius = tmp.radius; state.nearN = tmp.nearN; store.set('radius',state.radius); store.set('nearN',state.nearN);
   $('#dlgSet').close(); state.data={}; schedule(); render(); refreshAll();
