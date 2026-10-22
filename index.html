@@ -614,16 +614,17 @@ function tickClock(){
 /* ===== Actualización ===== */
 let lastOk = null, lastRefreshT = 0;
 function fmtSecs(ms){ return ms>=120000 ? Math.round(ms/60000)+' min' : Math.round(ms/1000)+' s'; }
-/* Intervalo automático según el consumo de la cuota diaria de PRIM:
-   <25 % → 10 s · 25–50 % → 15 s · 50–80 % → 20 s · ≥80 % → 30 s */
+/* Intervalo: 10 s fijos hasta 10 estaciones en pantalla. Con más de 10 se regula según el
+   consumo de la cuota diaria de PRIM: <25 % → 10 s · 25–50 % → 15 s · 50–80 % → 20 s · ≥80 % → 30 s */
+function stopCount(){ return new Set(allBoards().map(b=>b.stopId)).size; }
 function baseSecs(){
+  if(stopCount()<=10) return 10;
   const u = state.limit>0 ? state.usage/state.limit : 0;
   return u>=0.8 ? 30 : u>=0.5 ? 20 : u>=0.25 ? 15 : 10;
 }
 function nextDelay(){
   const base = baseSecs()*1000;
-  const eff = state.lastCalls * 64800 / (state.limit*0.8) * 1000;   // ~18 h de uso al día, 80 % de la cuota
-  let d = Math.max(base, eff);
+  let d = base;
   if(state.usage > state.limit*0.95) d = Math.max(d, 900000);
   if(state.rlUntil > Date.now()) d = Math.max(d, state.rlUntil-Date.now()+1000);
   return d;
@@ -648,7 +649,7 @@ async function refreshAll(){
   if(!errs) lastOk = new Date();
   const d = nextDelay();
   let t = errs ? '⚠ '+firstErr : 'Actualizado '+lastOk.toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'});
-  if(!errs) t += ' · cada '+fmtSecs(d)+(d > baseSecs()*1000+1000 ? ' (ajustado para no pasar tu cuota diaria)' : '');
+  if(!errs) t += ' · cada '+fmtSecs(d)+(d > baseSecs()*1000+1000 ? ' (frenado por el límite de PRIM)' : '');
   $('#status').textContent = t;
   render();
 }
