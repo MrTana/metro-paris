@@ -156,10 +156,6 @@ input[type=text],input[type=password]{width:100%;background:#fbf6ea;border:1px s
       <div class="tabs" id="cntTabs"></div>
     </div>
     <div>
-      <h3>Actualizar cada</h3>
-      <div class="tabs" id="refTabs"></div>
-    </div>
-    <div>
       <h3>Radio de búsqueda cercana (📍)</h3>
       <div class="tabs" id="radTabs"></div>
     </div>
@@ -207,7 +203,6 @@ const state = {
   key: store.get('key',''),
   boards: store.get('boards',[]),
   count: store.get('count',2),
-  refresh: store.get('refresh',30),
   base: DIRECT_BASE,
   proxy: false,
   data: {},   // por id de pantalla
@@ -619,9 +614,14 @@ function tickClock(){
 /* ===== Actualización ===== */
 let lastOk = null, lastRefreshT = 0;
 function fmtSecs(ms){ return ms>=120000 ? Math.round(ms/60000)+' min' : Math.round(ms/1000)+' s'; }
-/* Intervalo real: el elegido, o más largo si hace falta para no pasarse de la cuota diaria */
+/* Intervalo automático según el consumo de la cuota diaria de PRIM:
+   <25 % → 10 s · 25–50 % → 15 s · 50–80 % → 20 s · ≥80 % → 30 s */
+function baseSecs(){
+  const u = state.limit>0 ? state.usage/state.limit : 0;
+  return u>=0.8 ? 30 : u>=0.5 ? 20 : u>=0.25 ? 15 : 10;
+}
 function nextDelay(){
-  const base = state.refresh*1000;
+  const base = baseSecs()*1000;
   const eff = state.lastCalls * 64800 / (state.limit*0.8) * 1000;   // ~18 h de uso al día, 80 % de la cuota
   let d = Math.max(base, eff);
   if(state.usage > state.limit*0.95) d = Math.max(d, 900000);
@@ -648,7 +648,7 @@ async function refreshAll(){
   if(!errs) lastOk = new Date();
   const d = nextDelay();
   let t = errs ? '⚠ '+firstErr : 'Actualizado '+lastOk.toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'});
-  if(!errs && d > state.refresh*1000+1000) t += ' · intervalo ajustado a '+fmtSecs(d)+' por tu cuota diaria ('+state.limit+')';
+  if(!errs) t += ' · cada '+fmtSecs(d)+(d > baseSecs()*1000+1000 ? ' (ajustado para no pasar tu cuota diaria)' : '');
   $('#status').textContent = t;
   render();
 }
@@ -753,20 +753,19 @@ $('#addCancel').onclick = ()=>$('#dlgAdd').close();
 function chips(el, opts, cur, fmtFn){ el.innerHTML = opts.map(o=>'<span class="chip'+(o===cur?' on':'')+'" data-v="'+o+'">'+fmtFn(o)+'</span>').join(''); }
 let tmp = {};
 function openSet(){
-  $('#apikey').value = state.key; tmp = {count:state.count, refresh:state.refresh, radius:state.radius, nearN:state.nearN, limit:state.limit, busN:state.busN};
-  chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s');
+  $('#apikey').value = state.key; tmp = {count:state.count, radius:state.radius, nearN:state.nearN, limit:state.limit, busN:state.busN};
+  chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v);
   chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES')); chips($('#busTabs'),[0,2,3],tmp.busN,v=>v?String(v):'No');
   $('#dlgSet').showModal();
 }
 $('#cntTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.count=+c.dataset.v; chips($('#cntTabs'),[1,2,3,4],tmp.count,v=>v); };
-$('#refTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.refresh=+c.dataset.v; chips($('#refTabs'),[15,30,60],tmp.refresh,v=>v+' s'); };
 $('#radTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.radius=+c.dataset.v; chips($('#radTabs'),[300,500,800],tmp.radius,v=>v+' m'); };
 $('#nnTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.nearN=+c.dataset.v; chips($('#nnTabs'),[1,2,3],tmp.nearN,v=>v); };
 $('#busTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.busN=+c.dataset.v; chips($('#busTabs'),[0,2,3],tmp.busN,v=>v?String(v):'No'); };
 $('#limTabs').onclick = e=>{ const c=e.target.closest('.chip'); if(!c) return; tmp.limit=+c.dataset.v; chips($('#limTabs'),[1000,20000],tmp.limit,v=>v.toLocaleString('es-ES')); };
 $('#setOk').onclick = ()=>{
-  state.key = $('#apikey').value.trim(); state.count = tmp.count; state.refresh = tmp.refresh;
-  store.set('key',state.key); store.set('count',state.count); store.set('refresh',state.refresh);
+  state.key = $('#apikey').value.trim(); state.count = tmp.count;
+  store.set('key',state.key); store.set('count',state.count);
   const geoChanged = state.radius!==tmp.radius || state.nearN!==tmp.nearN || state.busN!==tmp.busN;
   state.busN = tmp.busN; store.set('busN',state.busN);
   state.limit = tmp.limit; store.set('limit',state.limit); showUsage();
