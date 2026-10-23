@@ -145,6 +145,13 @@ input:focus{outline:2px solid var(--primary);border-color:var(--primary)}
 footer{border-top:none;border-radius:24px 24px 0 0;color:var(--on-surface-v)}
 .sect{color:var(--on-surface);font-weight:700}
 .empty{color:var(--on-surface)}
+
+header{flex-direction:row!important;align-items:center;justify-content:space-between;gap:16px}
+.brand{width:auto!important;flex:none}
+#clock{flex:none!important}
+.tools{display:flex;gap:10px;padding:4px 18px 2px;align-items:center}
+#btnTheme{width:40px;height:40px;padding:0!important;font-size:17px;margin-left:auto}
+@media (max-width:520px){.tools{padding:4px 12px 2px}}
 </style>
 </head>
 <body>
@@ -152,13 +159,13 @@ footer{border-top:none;border-radius:24px 24px 0 0;color:var(--on-surface-v)}
   <div class="brand">
     <svg viewBox="20 8 1780 626" role="img" aria-label="Metro"><rect x="22" y="10" width="1776" height="622" rx="22" fill="#3c5a37"/><rect x="42" y="30" width="1736" height="582" rx="10" fill="#2c4529"/><rect x="70" y="50" width="1680" height="540" rx="4" fill="#e8302b"/><g fill="#f6f3ec" fill-rule="evenodd"><path d="M135 100H235L275 255L315 100H415V530H345V300L275 415L205 300V530H135ZM455 100H725V165H525V285H690V345H525V465H725V530H455ZM785 100H1050V165H945V530H880V165H785ZM1100 100H1325L1350 125V335H1170V530H1100ZM1170 165V275H1280V165ZM1285 352H1350V530H1285ZM1420 100H1530V165H1495V465H1530V530H1420ZM1565 100H1690V530H1565V465H1620V165H1565Z"/></g><g fill="#2c4529"><circle cx="56" cy="40" r="6"/><circle cx="1764" cy="40" r="6"/><circle cx="56" cy="602" r="6"/><circle cx="1764" cy="602" r="6"/></g></svg>
   </div>
-  <div class="hbar">
   <div id="clock">--:--:--</div>
+</header>
+<div class="tools">
   <button class="ico" id="btnNear" title="Mostrar primero las estaciones más cercanas a ti">📍</button>
   <button class="ico" id="btnAdd" title="Añadir pantalla">＋<span class="lbl"> Añadir</span></button>
   <button class="ico" id="btnSet" title="Ajustes">⚙</button>
-  </div>
-</header>
+</div>
 <div id="geoBar" class="geobar hide"></div>
 <main id="boards"></main>
 <footer>
@@ -167,7 +174,7 @@ footer{border-top:none;border-radius:24px 24px 0 0;color:var(--on-surface-v)}
   <button class="hide" id="installBtn" style="padding:2px 10px;font-size:12px">📲 Instalar app</button>
   <span id="usage"></span>
   <span id="mode"></span>
-  <button id="btnTheme" style="margin-left:auto;padding:6px 14px;font-size:12px" title="Cambiar entre tema claro y oscuro">🌙 Tema oscuro</button>
+  <button id="btnTheme" title="Cambiar entre tema claro y oscuro">🌙</button>
 </footer>
 
 <!-- Diálogo: añadir pantalla -->
@@ -953,7 +960,7 @@ if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){
   function apply(){
     const t = cur(); document.documentElement.dataset.theme = t;
     if(mt) mt.content = t==='dark' ? '#101511' : '#f1eee4';
-    const b = document.getElementById('btnTheme'); if(b){ b.textContent = t==='dark' ? '☀️ Tema claro' : '🌙 Tema oscuro'; b.title = t==='dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'; }
+    const b = document.getElementById('btnTheme'); if(b){ b.textContent = t==='dark' ? '☀️' : '🌙'; b.title = t==='dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'; }
   }
   window.applyTheme = apply; apply();
   document.getElementById('btnTheme').onclick = ()=>{ store.set('theme', cur()==='dark' ? 'light' : 'dark'); apply(); };
