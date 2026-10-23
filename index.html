@@ -45,7 +45,7 @@ html,body{margin:0;height:100%;background:var(--wallc) var(--wall) 0 0/64px 61.3
 body{display:flex;flex-direction:column;min-height:100vh}
 header{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 18px 8px;border-bottom:2px solid var(--primary)}
 .brand{display:flex;justify-content:center;width:100%}
-.brand svg{display:block;width:clamp(140px,40vw,300px);height:auto}
+.brand svg{display:block;width:clamp(150px,48vw,320px);height:auto}
 .hbar{display:flex;align-items:center;gap:10px;width:100%}
 #clock{flex:1;font-family:"DotGothic16",monospace;font-size:26px;color:var(--on-surface);letter-spacing:2px}
 button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:8px;padding:7px 12px}
@@ -161,14 +161,13 @@ header{background:none!important;box-shadow:none!important;border-radius:0!impor
 #clock{display:block;flex:none;background:linear-gradient(180deg,#0b1012,#030506);border:none;border-radius:18px;padding:9px 10px;
   background-clip:padding-box;position:relative;box-shadow:0 4px 12px rgba(0,0,0,.3);margin:0;--seg:#5be04a;--off:rgba(91,224,74,.07)}
 #clock .row{display:flex;align-items:center;justify-content:center;gap:3px}
-#clock{--d:clamp(15px,5.2vw,24px)}
+#clock{--d:clamp(11px,4.1vw,20px)}
 #clock svg.dg{width:var(--d);height:calc(var(--d)*1.667);display:block}
-#clock svg.dg.sm{width:calc(var(--d)*.7);height:calc(var(--d)*1.167);align-self:flex-end;margin-bottom:1px}
 #clock svg.dg path{fill:var(--off)}
 #clock svg.dg path.on{fill:var(--seg);filter:drop-shadow(0 0 3px rgba(91,224,74,.55))}
 #clock .col{display:flex;flex-direction:column;gap:9px;padding:0 1px}
 #clock .col i{display:block;width:5px;height:8px;border-radius:2px;background:var(--seg);box-shadow:0 0 5px rgba(91,224,74,.6)}
-@media (min-width:521px){#clock{padding:12px 16px}#clock{--d:42px}#clock .col{gap:17px}#clock .col i{width:9px;height:12px}}
+@media (min-width:521px){#clock{padding:12px 16px}#clock{--d:32px}#clock .col{gap:17px}#clock .col i{width:9px;height:12px}}
 </style>
 </head>
 <body>
@@ -689,7 +688,7 @@ function tickClock(){
   if(!el.firstChild){
     const SEG = ['M9 2L51 2L45 9L15 9Z','M54 4L54 47L48 43L48 11Z','M54 53L54 96L48 89L48 57Z','M9 98L51 98L45 91L15 91Z','M6 53L6 96L12 89L12 57Z','M6 4L6 47L12 43L12 11Z','M9 50L15 44L45 44L51 50L45 56L15 56Z'];
     const dg = c=>'<svg class="dg'+(c?' '+c:'')+'" viewBox="0 0 60 100">'+SEG.map(d=>'<path d="'+d+'"/>').join('')+'</svg>';
-    el.innerHTML = '<div class="row">'+dg()+dg()+'<div class="col"><i></i><i></i></div>'+dg()+dg()+'<div class="col"><i></i><i></i></div>'+dg('sm')+dg('sm')+'</div>';
+    el.innerHTML = '<div class="row">'+dg()+dg()+'<div class="col"><i></i><i></i></div>'+dg()+dg()+'<div class="col"><i></i><i></i></div>'+dg()+dg()+'</div>';
   }
   const MAP = {0:'abcdef',1:'bc',2:'abdeg',3:'abcdg',4:'bcfg',5:'acdfg',6:'acdefg',7:'abc',8:'abcdefg',9:'abcdfg'};
   const idx = {a:0,b:1,c:2,d:3,e:4,f:5,g:6};
