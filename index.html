@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metro París en vivo</title>
-<meta name="theme-color" content="#ebe0cb">
+<meta name="theme-color" content="#f1eee4">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -19,7 +19,7 @@
   --led:#ffb21a; --led-dim:#7a5610; --txt:#17424a; --mut:#5d7c7d; --ok:#2e8b57; --err:#b3392f; --acc:#2b6571;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html,body{margin:0;height:100%;background:#f1eee4 url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2296%22 height=%2292%22 viewBox=%220 0 96 92%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23fdfcf7%22/%3E%3Cstop offset=%221%22 stop-color=%22%23efebdf%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%2296%22 height=%2292%22 fill=%22url%28%23g%29%22/%3E%3Crect y=%2246%22 width=%2296%22 height=%2246%22 fill=%22url%28%23g%29%22/%3E%3Cg stroke=%22%238b7a68%22 stroke-width=%221.6%22 fill=%22none%22 opacity=%22.6%22%3E%3Cpath d=%22M0 1H96M0 47H96M0 91H96M1 0V46M97 0V46M49 46V92%22/%3E%3C/g%3E%3C/svg%3E") 0 0/64px 61.33px;color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 body{display:flex;flex-direction:column;min-height:100vh}
 header{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 18px 8px;border-bottom:2px solid var(--teal)}
 .brand{display:flex;justify-content:center;width:100%}
@@ -74,7 +74,7 @@ body.dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 .msg{flex:none;font-weight:700;font-size:17px;color:#f3b21b;padding:0 6px}
 .msg.err{flex:1;min-width:0;color:var(--err);font-size:12px;font-weight:500}
 .empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:60px 10px}
-footer{padding:8px 18px;border-top:1px solid var(--line);color:var(--mut);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
+footer{background:rgba(246,243,234,.92);padding:8px 18px;border-top:1px solid var(--line);color:var(--mut);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
 .demo{color:#a8610a;font-weight:600}
 /* diálogo */
 dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:0;width:min(640px,94vw);max-height:90vh}
