@@ -145,7 +145,6 @@ input:focus{outline:2px solid var(--primary);border-color:var(--primary)}
 footer{border-top:none;border-radius:24px 24px 0 0;color:var(--on-surface-v)}
 .sect{color:var(--on-surface);font-weight:700}
 .empty{color:var(--on-surface)}
-#btnTheme{font-size:18px}
 </style>
 </head>
 <body>
@@ -158,8 +157,6 @@ footer{border-top:none;border-radius:24px 24px 0 0;color:var(--on-surface-v)}
   <button class="ico" id="btnNear" title="Mostrar primero las estaciones más cercanas a ti">📍</button>
   <button class="ico" id="btnAdd" title="Añadir pantalla">＋<span class="lbl"> Añadir</span></button>
   <button class="ico" id="btnSet" title="Ajustes">⚙</button>
-  <button class="ico" id="btnFs" title="Pantalla completa">⛶</button>
-  <button class="ico" id="btnTheme" title="Cambiar entre tema claro y oscuro">🌙</button>
   </div>
 </header>
 <div id="geoBar" class="geobar hide"></div>
@@ -170,6 +167,7 @@ footer{border-top:none;border-radius:24px 24px 0 0;color:var(--on-surface-v)}
   <button class="hide" id="installBtn" style="padding:2px 10px;font-size:12px">📲 Instalar app</button>
   <span id="usage"></span>
   <span id="mode"></span>
+  <button id="btnTheme" style="margin-left:auto;padding:6px 14px;font-size:12px" title="Cambiar entre tema claro y oscuro">🌙 Tema oscuro</button>
 </footer>
 
 <!-- Diálogo: añadir pantalla -->
@@ -915,7 +913,6 @@ function endDrag(e){
 }
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
-$('#btnFs').onclick = ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); };
 
 /* Mantener la pantalla encendida */
 let wl=null;
@@ -956,7 +953,7 @@ if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){
   function apply(){
     const t = cur(); document.documentElement.dataset.theme = t;
     if(mt) mt.content = t==='dark' ? '#101511' : '#f1eee4';
-    const b = document.getElementById('btnTheme'); if(b){ b.textContent = t==='dark' ? '☀️' : '🌙'; b.title = t==='dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'; }
+    const b = document.getElementById('btnTheme'); if(b){ b.textContent = t==='dark' ? '☀️ Tema claro' : '🌙 Tema oscuro'; b.title = t==='dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'; }
   }
   window.applyTheme = apply; apply();
   document.getElementById('btnTheme').onclick = ()=>{ store.set('theme', cur()==='dark' ? 'light' : 'dark'); apply(); };
