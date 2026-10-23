@@ -158,8 +158,8 @@ footer{align-items:center;flex-wrap:nowrap}
 
 /* ===== Cabecera sin fondo + reloj digital ===== */
 header{background:none!important;box-shadow:none!important;border-radius:0!important;margin-bottom:0}
-#clock{display:block;flex:none;background:linear-gradient(180deg,#0b1012,#030506);border:3px solid transparent;border-radius:16px;padding:7px 9px 5px;
-  background-clip:padding-box;position:relative;box-shadow:0 0 0 3px #cfd3d6,0 0 0 4px #8d9396,0 6px 14px rgba(0,0,0,.35);margin:3px;--seg:#5be04a;--off:rgba(91,224,74,.07)}
+#clock{display:block;flex:none;background:linear-gradient(180deg,#0b1012,#030506);border:none;border-radius:16px;padding:8px 10px;
+  background-clip:padding-box;position:relative;box-shadow:0 4px 12px rgba(0,0,0,.3);margin:0;--seg:#5be04a;--off:rgba(91,224,74,.07)}
 #clock .row{display:flex;align-items:center;justify-content:center;gap:4px}
 #clock svg.dg{width:19px;height:33px;display:block}
 #clock svg.dg path{fill:var(--off)}
@@ -167,10 +167,7 @@ header{background:none!important;box-shadow:none!important;border-radius:0!impor
 #clock .col{display:flex;flex-direction:column;gap:7px;padding:0 1px}
 #clock .col i{display:block;width:5px;height:8px;border-radius:2px;background:var(--seg);box-shadow:0 0 5px rgba(91,224,74,.6);transition:opacity .2s}
 #clock .col.off i{opacity:.12}
-#clock .wk{display:flex;justify-content:space-between;margin-top:5px;font:700 9px/1 "Roboto Flex",system-ui,sans-serif;color:#f4f4f4;padding:0 2px}
-#clock .wk b{font-weight:700}
-#clock .wk b.on{color:var(--seg);text-shadow:0 0 5px rgba(91,224,74,.6)}
-@media (min-width:521px){#clock{padding:10px 16px 8px}#clock svg.dg{width:32px;height:54px}#clock .col{gap:13px}#clock .col i{width:7px;height:10px}#clock .wk{font-size:11px;margin-top:7px}}
+@media (min-width:521px){#clock{padding:12px 16px}#clock svg.dg{width:32px;height:54px}#clock .col{gap:13px}#clock .col i{width:7px;height:10px}}
 </style>
 </head>
 <body>
@@ -687,22 +684,17 @@ function tickClock(){
   const parts = new Intl.DateTimeFormat('fr-FR',{timeZone:'Europe/Paris',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,weekday:'short'}).formatToParts(new Date());
   const g = t=>(parts.find(p=>p.type===t)||{}).value||'';
   const hh = g('hour').replace(/\D/g,'').padStart(2,'0').slice(-2), mm = g('minute').padStart(2,'0'), ss = +g('second');
-  const wd = ['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'].indexOf(g('weekday').toLowerCase());
   const el = $('#clock');
   if(!el.firstChild){
     const SEG = ['M9 2L51 2L45 9L15 9Z','M54 4L54 47L48 43L48 11Z','M54 53L54 96L48 89L48 57Z','M9 98L51 98L45 91L15 91Z','M6 53L6 96L12 89L12 57Z','M6 4L6 47L12 43L12 11Z','M9 50L15 44L45 44L51 50L45 56L15 56Z'];
     const dg = ()=>'<svg class="dg" viewBox="0 0 60 100">'+SEG.map(d=>'<path d="'+d+'"/>').join('')+'</svg>';
-    const wk = ['L','M','X','J','V','S','D'].map(c=>'<b>'+c+'</b>').join('');
-    el.innerHTML = '<div class="row">'+dg()+dg()+'<div class="col"><i></i><i></i></div>'+dg()+dg()+'</div><div class="wk">'+wk+'</div>';
+    el.innerHTML = '<div class="row">'+dg()+dg()+'<div class="col"><i></i><i></i></div>'+dg()+dg()+'</div>';
   }
   const MAP = {0:'abcdef',1:'bc',2:'abdeg',3:'abcdg',4:'bcfg',5:'acdfg',6:'acdefg',7:'abc',8:'abcdefg',9:'abcdfg'};
   const idx = {a:0,b:1,c:2,d:3,e:4,f:5,g:6};
   const digs = el.querySelectorAll('svg.dg'), txt = hh+mm;
   digs.forEach((svg,i)=>{ const on = MAP[+txt[i]]; svg.querySelectorAll('path').forEach((p,k)=>p.classList.toggle('on', on.includes('abcdefg'[k]))); });
   el.querySelector('.col').classList.toggle('off', ss%2===1);
-  // semana en orden L M X J V S D (lunes primero)
-  const order = [1,2,3,4,5,6,0];
-  el.querySelectorAll('.wk b').forEach((b,i)=>b.classList.toggle('on', order[i]===wd));
   el.title = hh+':'+mm;
 }
 
