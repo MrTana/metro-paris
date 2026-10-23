@@ -152,6 +152,9 @@ header{flex-direction:row!important;align-items:center;justify-content:space-bet
 .tools{display:flex;gap:10px;padding:4px 18px 2px;align-items:center}
 #btnTheme{width:40px;height:40px;padding:0!important;font-size:17px;margin-left:auto}
 @media (max-width:520px){.tools{padding:4px 12px 2px}}
+footer{align-items:center;flex-wrap:nowrap}
+.finfo{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
+#btnTheme{flex:none}
 </style>
 </head>
 <body>
@@ -169,11 +172,12 @@ header{flex-direction:row!important;align-items:center;justify-content:space-bet
 <div id="geoBar" class="geobar hide"></div>
 <main id="boards"></main>
 <footer>
+  <div class="finfo">
   <span id="status">Cargando…</span>
-  <span>Las cifras son minutos · atenuado = horario teórico</span>
   <button class="hide" id="installBtn" style="padding:2px 10px;font-size:12px">📲 Instalar app</button>
   <span id="usage"></span>
   <span id="mode"></span>
+  </div>
   <button id="btnTheme" title="Cambiar entre tema claro y oscuro">🌙</button>
 </footer>
 
